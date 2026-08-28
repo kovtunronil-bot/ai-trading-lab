@@ -665,7 +665,23 @@ def auto_adjust_strategy(symbol):
         current_perf = perf.get(current)
         if not current_perf:
             return None, f"{current} has no trade history"
-        if current_perf["grade"] == "D":
+        # Never switch a strategy while we hold the symbol — swapping the exit logic
+        # under an open position could strand or mis-exit the trade.
+        try:
+            from alpaca.trading.client import TradingClient
+            from keys import API_KEY, SECRET_KEY
+            _client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+            _hp = {p.symbol for p in _client.get_all_positions()}
+            if alpaca_sym(symbol) in _hp or symbol in _hp:
+                return None, f"{symbol} currently held — deferring strategy switch"
+        except Exception:
+            pass
+        # Replace strategies that are genuinely bad: grade D, OR low win-rate
+        # (lose more often than they win) once we have enough evidence.
+        grade = current_perf["grade"]
+        low_wr = current_perf["win_rate"] < 0.40 and current_perf["n"] >= 5
+        trigger = grade in ("D", "F") or low_wr
+        if trigger:
             candidates_list = candidates()
             best = None
             best_score = -99
@@ -681,11 +697,12 @@ def auto_adjust_strategy(symbol):
                         best = c
             if best:
                 old_label = current
+                why = "grade D" if grade in ("D", "F") else f"win-rate {current_perf['win_rate']:.0%}"
                 cfg.update(best)
                 cfg["symbol"] = symbol
                 save_config(cfg)
                 lesson = (f"[{datetime.now():%Y-%m-%d %H:%M}] AUTO-ADJUST {symbol}: "
-                          f"{old_label} (grade D, {current_perf['avg_pnl']:+.1f}%) -> "
+                          f"{old_label} ({why}, {current_perf['avg_pnl']:+.1f}%) -> "
                           f"{best.get('label')} (grade {perf[best.get('label', '')].get('grade', '?')})")
                 conn = init_db()
                 conn.execute("INSERT INTO lessons(ts,text) VALUES(?,?)",
@@ -694,10 +711,8 @@ def auto_adjust_strategy(symbol):
                 conn.close()
                 print(f"  AUTO-ADJUST: {lesson}")
                 return best.get("label"), lesson
-            return None, f"{current} is grade D but no better strategy found"
-        if current_perf["grade"] == "C" and current_perf["n"] >= 5:
-            return None, f"{current} is grade C ({current_perf['avg_pnl']:+.1f}%) — watching"
-        return None, f"{current} is grade {current_perf['grade']} — ok"
+            return None, f"{current} is bad ({why}) but no better strategy found"
+        return None, f"{current} is grade {grade} (wr {current_perf['win_rate']:.0%}) — ok"
     except Exception as e:
         return None, str(e)
 
