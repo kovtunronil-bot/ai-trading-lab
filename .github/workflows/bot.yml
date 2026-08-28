@@ -23,6 +23,9 @@ jobs:
     - name: Install dependencies
       run: pip install -r requirements.txt
 
+    - name: Seed self-learning memory (backfill from history)
+      run: python seed_memory.py
+
     - name: Run trading bot
       env:
         APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
