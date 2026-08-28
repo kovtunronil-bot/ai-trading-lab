@@ -9,6 +9,8 @@ jobs:
   trade:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -28,9 +30,12 @@ jobs:
       run: python cloud_bot.py
 
     - name: Commit DB changes
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         git config user.name "Trading Robot"
         git config user.email "robot@bot.local"
-        git add lab.db config_*.json
-        git diff --cached --quiet || git commit -m "bot update $(date -u +%Y-%m-%dT%H:%M)"
-        git push
+        git add lab.db config_*.json state.json proposals.json
+        git diff --cached --quiet && exit 0
+        git commit -m "bot update $(date -u +%Y-%m-%dT%H:%M)"
+        git push "https://x-access-token:${GH_TOKEN}@github.com/kovtunronil-bot/ai-trading-lab.git" HEAD:master
