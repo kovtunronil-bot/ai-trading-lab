@@ -1793,12 +1793,25 @@ def save_state(state):
 
 def log_equity(equity, peak):
     conn = init_db()
-    dd = (equity / peak - 1) * 100 if peak else 0.0
-    conn.execute("INSERT OR REPLACE INTO equity_history(date,equity,peak,drawdown_pct) VALUES(?,?,?,?)",
-                 (datetime.now().strftime("%Y-%m-%d"), round(equity, 2),
-                  round(peak, 2), round(dd, 2)))
-    conn.commit()
-    conn.close()
+    try:
+        if peak is None or peak <= 0 or equity is None or equity <= 0:
+            conn.close()
+            return
+        if equity > peak * 2 or peak > equity * 20:
+            conn.close()
+            return
+        dd = (equity / peak - 1) * 100 if peak else 0.0
+        conn.execute("INSERT OR REPLACE INTO equity_history(date,equity,peak,drawdown_pct) VALUES(?,?,?,?)",
+                     (datetime.now().strftime("%Y-%m-%d"), round(equity, 2),
+                      round(peak, 2), round(dd, 2)))
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def equity_history_df():
