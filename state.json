@@ -1,0 +1,13 @@
+{
+  "peak_equity": 100000.0,
+  "halted": false,
+  "position_strategies": {
+    "BTCUSD": "Donchian 20/10",
+    "BTC/USD": "Donchian 20/10",
+    "MSFT": "BUY&HOLD",
+    "TSLA": "EMA_CROSS_12_26"
+  },
+  "stops": {
+    "BTCUSD": 76024.6335
+  }
+}

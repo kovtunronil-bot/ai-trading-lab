@@ -9,7 +9,6 @@ _*.py
 
 # SECRETS - NEVER commit these
 keys.py
-state.json
 positions_snapshot.json
 *.log
 lessons.txt
