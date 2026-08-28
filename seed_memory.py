@@ -95,13 +95,19 @@ def main():
     print(f"SEED MEMORY — {datetime.datetime.now():%Y-%m-%d %H:%M}")
     print("=" * 60)
 
-    # Reset seeded tables so re-runs are idempotent (avoid duplicate pattern/loss rows)
     conn = sqlite3.connect(brain.DB_FILE, timeout=10)
-    for t in ["pattern_memory", "loss_memory", "kelly_data", "trade_pnl"]:
-        conn.execute(f"DELETE FROM {t}")
-    conn.commit()
+    n_pnl = conn.execute("SELECT COUNT(*) FROM trade_pnl").fetchone()[0]
+    n_pattern = conn.execute("SELECT COUNT(*) FROM pattern_memory").fetchone()[0]
     conn.close()
-    print("Cleared pattern_memory, loss_memory, kelly_data, trade_pnl for clean reseed.")
+
+    # Bootstrap only: if learning already exists (from a prior seed or live trades),
+    # do NOT wipe it. Wiping every run would erase real self-improvement on each cycle.
+    if n_pattern > 0 and n_pnl > 0:
+        print(f"Skipping (already seeded: {n_pattern} patterns, {n_pnl} pnl rows). "
+              "Preserving live learning.")
+        return
+
+    print("Seeding self-learning memory from historical walk...")
 
     total = 0
     for sym in MARKETS:

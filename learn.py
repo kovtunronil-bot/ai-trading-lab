@@ -123,9 +123,13 @@ def auto_switch_losers():
 
 
 def update_kelly_from_trades():
-    """Update Kelly data from actual trade results."""
+    """Rebuild Kelly data from scratch from trade_pnl so it is idempotent
+    (running every cycle does NOT keep double-counting accumulated trades)."""
     conn = brain.init_db()
     rows = conn.execute("SELECT symbol, pnl_pct FROM trade_pnl ORDER BY ts").fetchall()
+    # rebuild deterministically from the full history
+    conn.execute("DELETE FROM kelly_data")
+    conn.commit()
     conn.close()
     for symbol, pnl_pct in rows:
         brain.update_kelly_data(symbol, pnl_pct)
