@@ -7,6 +7,10 @@ dashboard.html
 *.csv
 _*.py
 
+# Runtime data - regenerated every run; committing causes merge conflicts
+lab.db
+lab.db-*
+
 # SECRETS - NEVER commit these
 keys.py
 positions_snapshot.json
