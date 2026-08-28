@@ -33,7 +33,9 @@ POSITION_STOP_LOSS = 0.08
 PORTFOLIO_HEAT_CAP = 0.85
 TRAIL_ACTIVATE = 0.03
 TRAIL_GIVEBACK = 0.05
-MIN_CONVICTION = 0.50
+MIN_CONVICTION = 0.35
+# Above this conviction, trade at full size; below it, scale down proportionally.
+FREE_SAIL_CONVICTION = 0.55
 FLAT_THRESHOLD = 0.005
 FLAT_MAX_DAYS = 15
 SECTOR_CAP = 0.40
@@ -405,6 +407,14 @@ def sector_blocked(positions, new_symbol, equity=100000):
     sec = get_sector(new_symbol)
     current = sector_exposure(positions, equity=equity)
     return current.get(sec, 0) > SECTOR_CAP
+
+
+def sector_room(positions, new_symbol, equity=100000):
+    sec = get_sector(new_symbol)
+    current = sector_exposure(positions, equity=equity)
+    used = current.get(sec, 0)
+    room = max(0.0, min(1.0, (SECTOR_CAP - used) / max(SECTOR_CAP, 1e-6)))
+    return room
 
 
 def conviction_score(symbol, cfg, tf_agreement=1.0, news_verdict="NEUTRAL",

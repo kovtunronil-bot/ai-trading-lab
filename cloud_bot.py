@@ -177,18 +177,33 @@ def run_cloud():
                     action, detail = "MOMENTUM-BLOCKED", f"price dropped {recent_mom*100:+.1f}%"
                 elif symbol in pending_symbols:
                     action, detail = "PENDING", "order working"
-                elif deployed + sized_notional > brain.dynamic_heat_cap(live_regime, drawdown) * equity:
-                    hc = brain.dynamic_heat_cap(live_regime, drawdown)
-                    action, detail = "HEAT-BLOCKED", f"would breach {hc*100:.0f}% ({live_regime})"
-                elif conviction < brain.MIN_CONVICTION:
-                    action, detail = "LOW-CONVICTION", f"{conviction:.0%} < {brain.MIN_CONVICTION:.0%}"
                 else:
-                    try:
-                        verdict, reason = news_mod.sentiment(symbol) if news_mod else ("NEUTRAL", "no news module")
-                        if verdict == "BEARISH":
-                            action, detail = "NEWS-BLOCKED", reason[:60]
-                    except Exception:
-                        pass
+                    size_mult = 1.0
+                    hc = brain.dynamic_heat_cap(live_regime, drawdown)
+                    if deployed + sized_notional > hc * equity:
+                        size_mult = min(size_mult, max(0.0, ((hc * equity) - deployed) / max(sized_notional, 1)))
+                        print(f">>> HEAT: sizing down {size_mult:.0%} to respect {hc*100:.0f}% cap ({live_regime})")
+                    if conviction < brain.FREE_SAIL_CONVICTION:
+                        if conviction < brain.MIN_CONVICTION:
+                            action, detail = "LOW-CONVICTION", f"{conviction:.0%} < {brain.MIN_CONVICTION:.0%}"
+                        else:
+                            size_mult = min(size_mult, 0.6)
+                            print(f">>> Conviction {conviction:.0%}: scaling down to 60%")
+                    if action == "WAIT" and brain.sector_blocked(positions, symbol, equity):
+                        room = brain.sector_room(positions, symbol, equity)
+                        size_mult = min(size_mult, max(0.2, room))
+                        print(f">>> SECTOR: sizing down to {room:.0%}")
+                    if action == "WAIT" and drawdown < -0.02 and conviction < 0.7:
+                        size_mult = min(size_mult, 0.55)
+                        print(f">>> DRAWDOWN-CONSERVATIVE: sizing down to 55%")
+                    if action == "WAIT":
+                        sized_notional = max(200, planned_notional * conviction * size_mult)
+                        try:
+                            verdict, reason = news_mod.sentiment(symbol) if news_mod else ("NEUTRAL", "no news module")
+                            if verdict == "BEARISH":
+                                action, detail = "NEWS-BLOCKED", reason[:60]
+                        except Exception:
+                            pass
 
                     if action == "WAIT":
                         oid, st, fill_price = smart_buy(symbol, sized_notional, price)

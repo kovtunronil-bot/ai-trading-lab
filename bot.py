@@ -436,97 +436,119 @@ for symbol in brain.ALL:
             elif symbol not in brain.CRYPTO and not market_open:
                 action, detail = "MARKET-CLOSED", f"signal fired (${planned_notional} planned) — will trade at next open run"
                 print(f">>> {detail}")
-            elif deployed + sized_notional > brain.dynamic_heat_cap(live_regime, drawdown) * equity:
-                hc = brain.dynamic_heat_cap(live_regime, drawdown)
-                action, detail = "HEAT-BLOCKED", f"deployed ${deployed:,.0f} + ${sized_notional:,.0f} would breach {hc*100:.0f}% cap ({live_regime})"
-                print(f">>> HEAT CAP: entry skipped — {detail}")
-            elif conviction < brain.MIN_CONVICTION:
-                action, detail = "LOW-CONVICTION", f"conviction {conviction:.0%} below {brain.MIN_CONVICTION:.0%} threshold"
-                print(f">>> CONVICTION: too low — {detail}")
-            elif brain.sector_blocked(positions, symbol, equity):
-                sec = brain.get_sector(symbol)
-                action, detail = "SECTOR-CAP", f"{sec} sector already >{brain.SECTOR_CAP*100:.0f}% of portfolio"
-                print(f">>> SECTOR: entry blocked — {detail}")
-            elif drawdown < -0.02 and conviction < 0.7:
-                action, detail = "DRAWDOWN-CONSERVATIVE", f"portfolio {drawdown*100:+.1f}% drawdown + conviction {conviction:.0%} < 70%"
-                print(f">>> DRAWDOWN: {detail}")
-            elif brain.should_avoid(symbol, live_regime):
-                action, detail = "LOSS-MEMORY", f"{symbol} has 3+ losses in {live_regime} regime"
-                print(f">>> LOSS MEMORY: avoiding — {detail}")
-            elif brain.detect_divergence(df) == "bearish":
-                action, detail = "DIVERGENCE", "bearish divergence: price rising but momentum falling"
-                print(f">>> DIVERGENCE: bearish trap detected — {detail}")
-            elif brain.avoid_entry_window(symbol)[0]:
-                _, timing_msg = brain.avoid_entry_window(symbol)
-                action, detail = "TIMING", timing_msg
-                print(f">>> TIMING: entry deferred — {detail}")
             else:
-                pattern = brain.hash_pattern(df, live_regime)
-                hist_pnl = brain.check_pattern_memory(symbol, pattern)
-                if hist_pnl is not None and hist_pnl < -2:
-                    action, detail = "PATTERN-MEM", f"similar past setups averaged {hist_pnl:+.1f}%"
-                    print(f">>> PATTERN MEMORY: historical loss — {detail}")
-                else:
-                    gate = brain.correlation_gate(closes, symbol, held_symbols)
-                    corr_penalty = 0.0
-                    if gate["blocked"]:
-                        action, detail = "CORR-BLOCKED", f"{gate['alike']} held assets >70% correlated (avg {gate['avg']})"
-                        print(f">>> CORRELATION RISK MANAGER: entry BLOCKED — {detail}")
+                size_mult = 1.0
+                size_reasons = []
+
+                hc = brain.dynamic_heat_cap(live_regime, drawdown)
+                if deployed + sized_notional > hc * equity:
+                    size_mult = min(size_mult, max(0.0, ((hc * equity) - deployed) / max(sized_notional, 1)))
+                    size_reasons.append(f"heat cap {hc*100:.0f}%")
+                    print(f">>> HEAT: sizing down {size_mult:.0%} to respect {hc*100:.0f}% cap ({live_regime})")
+
+                if conviction < brain.MIN_CONVICTION:
+                    action, detail = "LOW-CONVICTION", f"conviction {conviction:.0%} below {brain.MIN_CONVICTION:.0%}"
+                    print(f">>> CONVICTION: {conviction:.0%} too low — skipped")
+                elif conviction < brain.FREE_SAIL_CONVICTION:
+                    size_mult = min(size_mult, 0.6)
+                    size_reasons.append(f"medium conviction {conviction:.0%}")
+                    print(f">>> Conviction {conviction:.0%}: scaling down to 60%")
+
+                if action == "WAIT" and brain.sector_blocked(positions, symbol, equity):
+                    sector_room = brain.sector_room(positions, symbol, equity)
+                    size_mult = min(size_mult, max(0.2, sector_room))
+                    size_reasons.append(f"sector room {sector_room:.0%}")
+                    print(f">>> SECTOR: sizing down to {sector_room:.0%} to respect cap")
+
+                if action == "WAIT" and drawdown < -0.02 and conviction < 0.7:
+                    size_mult = min(size_mult, 0.55)
+                    size_reasons.append(f"drawdown {drawdown*100:+.1f}% + conv {conviction:.0%}")
+                    print(f">>> DRAWDOWN-CONSERVATIVE: sizing down to 55%")
+
+                if action == "WAIT" and brain.detect_divergence(df) == "bearish":
+                    size_mult = min(size_mult, 0.5)
+                    size_reasons.append("bearish divergence")
+                    print(f">>> DIVERGENCE: sizing down to 50% (bearish trap)")
+
+                if action == "WAIT" and brain.avoid_entry_window(symbol)[0]:
+                    _, timing_msg = brain.avoid_entry_window(symbol)
+                    size_mult = min(size_mult, 0.5)
+                    size_reasons.append("late close timing")
+                    print(f">>> TIMING: sizing down to 50% ({timing_msg})")
+
+                if action == "WAIT" and brain.should_avoid(symbol, live_regime):
+                    action, detail = "LOSS-MEMORY", f"{symbol} has 3+ losses in {live_regime} regime"
+                    print(f">>> LOSS MEMORY: avoiding — {detail}")
+
+                if action == "WAIT":
+                    sized_notional = max(200, planned_notional * conviction * size_mult)
+                    if size_reasons:
+                        print(f">>> SIZING: ${sized_notional:,.0f} ({'; '.join(size_reasons)})")
+                    pattern = brain.hash_pattern(df, live_regime)
+                    hist_pnl = brain.check_pattern_memory(symbol, pattern)
+                    if hist_pnl is not None and hist_pnl < -2:
+                        action, detail = "PATTERN-MEM", f"similar past setups averaged {hist_pnl:+.1f}%"
+                        print(f">>> PATTERN MEMORY: historical loss — {detail}")
                     else:
-                        if gate["alike"] == 1:
-                            corr_penalty = 0.15
-                            print(f"    correlation penalty: -15% (1 correlated hold)")
-                    if action == "WAIT" and corr_penalty > 0:
-                        conviction = max(0.0, conviction - corr_penalty)
-                        sized_notional = planned_notional * conviction
-                        print(f">>> CORR-SIZE: conviction {conviction:.0%}, sized ${sized_notional:,.0f}")
-                    if action == "WAIT":
-                        news_verdict = "NEUTRAL"
-                        try:
-                            import news as news_mod
-                            verdict, reason = news_mod.sentiment(symbol)
-                            news_verdict = verdict
-                            print(f">>> NEWS SHIELD: {verdict} — {reason}")
-                            brain.log_journal(symbol, price, "NEWS", f"{verdict}: {reason}"[:100], equity)
-                            if verdict == "BEARISH":
-                                action, detail = "NEWS-BLOCKED", f"bearish headlines: {reason[:80]}"
-                                print(">>> NEWS SHIELD says NO — entry canceled")
-                                brain.send_alert(f"NEWS-BLOCKED: {symbol}")
-                                brain.log_journal(symbol, price, action, detail, equity)
-                                actions[symbol] = (action, detail)
-                                continue
-                        except Exception as e:
-                            print(f"    news check skipped ({e})")
-                        if action == "WAIT" and news_verdict != "NEUTRAL":
-                            conviction = brain.conviction_score(symbol, cfg, tf_agree,
-                                                                news_verdict=news_verdict,
-                                                                ensemble_agree=ensemble_agree,
-                                                                regime=live_regime)
-                            sized_notional = planned_notional * conviction
-                            print(f">>> NEWS-CONVICTION: {news_verdict} -> conviction {conviction:.0%}, sized ${sized_notional:,.0f}")
-                    try:
-                        import vision
-                        if vision.model_available():
-                            eyes = vision.analyze_chart(symbol, df)
-                            print(f">>> EYES say:\n    " + eyes.replace("\n", "\n    "))
-                            brain.log_journal(symbol, price, "EYES", eyes.replace("\n", " | ")[:100], equity)
+                        gate = brain.correlation_gate(closes, symbol, held_symbols)
+                        corr_penalty = 0.0
+                        if gate["blocked"]:
+                            action, detail = "CORR-BLOCKED", f"{gate['alike']} held assets >70% correlated (avg {gate['avg']})"
+                            print(f">>> CORRELATION RISK MANAGER: entry BLOCKED — {detail}")
                         else:
-                            eyes = "(vision model not installed)"
-                    except Exception as e:
-                        eyes = f"(eyes error: {e})"
-                        print(f"    {eyes}")
-                    cancel_stale_orders(symbol)
-                    oid, st, fill_price = smart_buy(symbol, sized_notional, price)
-                    action, detail = "BUY", f"{symbol} ${sized_notional:,.0f} conv={conviction:.0%} (corr {gate['avg']})"
-                    print(f">>> EXECUTED BUY {detail}")
-                    held_symbols.append(symbol)
-                    from datetime import datetime as _dt
-                    brain.log_trade(_dt.now().isoformat(timespec="seconds"), symbol, "BUY",
-                                    sized_notional, None, None, st, "smart-limit",
-                                    fill_price=fill_price, signal_price=price,
-                                    strategy=cfg.get("label", "?"))
-                    brain.set_position_strategy(symbol, cfg.get("label", "?"))
-                    brain.send_alert(f"נ’° BUY | ׳§׳ ׳™׳™׳” {symbol} ${planned_notional} @ ${fill_price or price}")
+                            if gate["alike"] == 1:
+                                corr_penalty = 0.15
+                                print(f"    correlation penalty: -15% (1 correlated hold)")
+                            if corr_penalty > 0:
+                                conviction = max(0.0, conviction - corr_penalty)
+                                sized_notional = planned_notional * conviction * size_mult
+                                print(f">>> CORR-SIZE: conviction {conviction:.0%}, sized ${sized_notional:,.0f}")
+                            news_verdict = "NEUTRAL"
+                            try:
+                                import news as news_mod
+                                verdict, reason = news_mod.sentiment(symbol)
+                                news_verdict = verdict
+                                print(f">>> NEWS SHIELD: {verdict} — {reason}")
+                                brain.log_journal(symbol, price, "NEWS", f"{verdict}: {reason}"[:100], equity)
+                                if verdict == "BEARISH":
+                                    action, detail = "NEWS-BLOCKED", f"bearish headlines: {reason[:80]}"
+                                    print(">>> NEWS SHIELD says NO — entry canceled")
+                                    brain.send_alert(f"NEWS-BLOCKED: {symbol}")
+                                    brain.log_journal(symbol, price, action, detail, equity)
+                                    actions[symbol] = (action, detail)
+                                    continue
+                            except Exception as e:
+                                print(f"    news check skipped ({e})")
+                            if news_verdict != "NEUTRAL":
+                                conviction = brain.conviction_score(symbol, cfg, tf_agree,
+                                                                    news_verdict=news_verdict,
+                                                                    ensemble_agree=ensemble_agree,
+                                                                    regime=live_regime)
+                                sized_notional = planned_notional * conviction * size_mult
+                                print(f">>> NEWS-CONVICTION: {news_verdict} -> conviction {conviction:.0%}, sized ${sized_notional:,.0f}")
+                            try:
+                                import vision
+                                if vision.model_available():
+                                    eyes = vision.analyze_chart(symbol, df)
+                                    print(f">>> EYES say:\n    " + eyes.replace("\n", "\n    "))
+                                    brain.log_journal(symbol, price, "EYES", eyes.replace("\n", " | ")[:100], equity)
+                                else:
+                                    eyes = "(vision model not installed)"
+                            except Exception as e:
+                                eyes = f"(eyes error: {e})"
+                                print(f"    {eyes}")
+                            cancel_stale_orders(symbol)
+                            oid, st, fill_price = smart_buy(symbol, sized_notional, price)
+                            action, detail = "BUY", f"{symbol} ${sized_notional:,.0f} conv={conviction:.0%} (corr {gate['avg']})"
+                            print(f">>> EXECUTED BUY {detail}")
+                            held_symbols.append(symbol)
+                            from datetime import datetime as _dt
+                            brain.log_trade(_dt.now().isoformat(timespec="seconds"), symbol, "BUY",
+                                            sized_notional, None, None, st, "smart-limit",
+                                            fill_price=fill_price, signal_price=price,
+                                            strategy=cfg.get("label", "?"))
+                            brain.set_position_strategy(symbol, cfg.get("label", "?"))
+                            brain.send_alert(f"נ’° BUY | ׳§׳ ׳™׳™׳” {symbol} ${planned_notional} @ ${fill_price or price}")
         elif want_in and holding is None and not allow_entries:
             action, detail = "BLOCKED", "CAUTION mode blocks entries"
             print(">>> signal fired but risk manager says NO new entries today")
