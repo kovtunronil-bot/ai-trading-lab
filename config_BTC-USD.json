@@ -1,0 +1,20 @@
+{
+  "mode": "atr_breakout",
+  "entry": 55,
+  "exit": 27,
+  "label": "ATRbrk 55d x1.0",
+  "symbol": "BTC/USD",
+  "regime": "HIGH_VOL",
+  "test_score": 15.67,
+  "hold_test_score": -3.074,
+  "adaptive": {
+    "rsi_buy": 10,
+    "rsi_sell": 60,
+    "ema_fast": 9,
+    "ema_slow": 21,
+    "atr_mult": 1.0,
+    "note": "normal-vol: standard"
+  },
+  "updated": "2026-08-26T20:07:05",
+  "mult": 1.0
+}

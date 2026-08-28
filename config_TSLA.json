@@ -1,0 +1,20 @@
+{
+  "mode": "rsi",
+  "label": "RSI14 <25/55",
+  "symbol": "TSLA",
+  "regime": "BEAR_TREND",
+  "test_score": 52.42,
+  "hold_test_score": -3.02,
+  "adaptive": {
+    "rsi_buy": 8,
+    "rsi_sell": 55,
+    "ema_fast": 7,
+    "ema_slow": 18,
+    "atr_mult": 0.75,
+    "note": "low-vol: tighter thresholds"
+  },
+  "updated": "2026-08-26T20:04:58",
+  "period": 14,
+  "buy_below": 25,
+  "sell_above": 55
+}

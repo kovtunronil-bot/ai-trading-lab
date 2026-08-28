@@ -1,0 +1,36 @@
+name: AI Trading Robot
+
+on:
+  schedule:
+    - cron: '30 0,4,8,12,16,20 * * *'   # Every 4 hours (UTC)
+  workflow_dispatch:                       # Manual trigger button
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Run trading bot
+      env:
+        APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+        APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+      run: python cloud_bot.py
+
+    - name: Commit DB changes
+      run: |
+        git config user.name "Trading Robot"
+        git config user.email "robot@bot.local"
+        git add lab.db config_*.json
+        git diff --cached --quiet || git commit -m "bot update $(date -u +%Y-%m-%dT%H:%M)"
+        git push

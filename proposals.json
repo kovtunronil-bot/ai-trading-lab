@@ -1,0 +1,1 @@
+[{"mode":"rsi","period":4,"buy_below":12,"sell_above":62,"trend":150,"vol_mult":1.3},{"mode":"donchian","entry":35,"exit":18},{"mode":"chaos","period":999999}]

@@ -1,0 +1,20 @@
+{
+  "mode": "stoch",
+  "k": 14,
+  "buy_below": 20,
+  "sell_above": 80,
+  "label": "Stoch14 <20/>80",
+  "symbol": "NVDA",
+  "regime": "BULL_TREND",
+  "test_score": 4.48384,
+  "hold_test_score": -2.779,
+  "adaptive": {
+    "rsi_buy": 10,
+    "rsi_sell": 60,
+    "ema_fast": 9,
+    "ema_slow": 21,
+    "atr_mult": 1.0,
+    "note": "normal-vol: standard"
+  },
+  "updated": "2026-08-26T20:04:58"
+}

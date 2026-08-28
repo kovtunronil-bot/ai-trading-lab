@@ -1,0 +1,19 @@
+{
+  "mode": "ema_cross",
+  "fast": 9,
+  "slow": 21,
+  "label": "EMA9/21",
+  "symbol": "MSFT",
+  "regime": "BULL_TREND",
+  "test_score": 2.2866720000000003,
+  "hold_test_score": 1.687,
+  "adaptive": {
+    "rsi_buy": 15,
+    "rsi_sell": 65,
+    "ema_fast": 12,
+    "ema_slow": 26,
+    "atr_mult": 1.5,
+    "note": "high-vol: wider thresholds"
+  },
+  "updated": "2026-08-26T20:36:49"
+}

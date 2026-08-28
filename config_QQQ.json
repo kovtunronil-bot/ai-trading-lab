@@ -1,0 +1,20 @@
+{
+  "mode": "rsi",
+  "label": "RSI4 <20/60",
+  "symbol": "QQQ",
+  "regime": "QUIET_RANGE",
+  "test_score": 15.87,
+  "hold_test_score": -99.0,
+  "adaptive": {
+    "rsi_buy": 10,
+    "rsi_sell": 60,
+    "ema_fast": 9,
+    "ema_slow": 21,
+    "atr_mult": 1.0,
+    "note": "normal-vol: standard"
+  },
+  "updated": "2026-08-26T20:33:35",
+  "period": 4,
+  "buy_below": 20,
+  "sell_above": 60
+}

@@ -1,0 +1,17 @@
+{
+  "mode": "bollinger",
+  "label": "Bollinger dip",
+  "symbol": "META",
+  "regime": "BEAR_TREND",
+  "test_score": 4.223968,
+  "hold_test_score": -1.418,
+  "adaptive": {
+    "rsi_buy": 10,
+    "rsi_sell": 60,
+    "ema_fast": 9,
+    "ema_slow": 21,
+    "atr_mult": 1.0,
+    "note": "normal-vol: standard"
+  },
+  "updated": "2026-08-26T20:36:50"
+}

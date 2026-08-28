@@ -1,0 +1,58 @@
+=====================================================
+  YOUR AI TRADING ROBOT — PLAIN-WORDS MANUAL
+=====================================================
+
+WHAT IS THIS?
+  A robot on your PC that trades fake money ($100,000)
+  across 9 markets (7 stocks + Bitcoin + Ethereum),
+  improves its own strategies, and reports to your phone.
+
+-----------------------------------------------------
+FILES IN THIS FOLDER
+-----------------------------------------------------
+run-robot.bat ........ DOUBLE-CLICK to run the robot now
+run-robot-night.bat .. silent version (used automatically at night)
+run-report.bat ....... ask the AI to analyze the robot's diary
+bot.py ............... the robot itself
+brain.py ............. the self-improvement engine (24 strategies)
+report.py ............ sends diary to Llama for weekly critique
+keys.py .............. passwords (Alpaca keys + phone alert topic)
+
+journal.csv .......... robot's diary: one line per market per run
+lessons.txt .......... evolution history: every strategy change ever made
+equity_history.csv ... daily scoreboard of your fake money
+reports_history.md ... all past AI reports
+config_*.json ........ current champion strategy per market
+
+-----------------------------------------------------
+WHEN DOES IT WORK? (Windows Task Scheduler)
+-----------------------------------------------------
+19:00 daily .... main run: evolve brain if stale + trade + phone alert
+19:40 Sunday ... Llama writes weekly report
+23:30 / 03:30 / 07:30 ... night patrols (alert only if a trade happens)
+
+-----------------------------------------------------
+HOW TO READ THE ROBOT'S OUTPUT
+-----------------------------------------------------
+"entry needs : RSI 47 < 5"   -> it buys only in rare panic dips
+"filters blocked entry"      -> signal fired but safety said no
+"EXECUTED BUY/SELL"          -> a real paper order was placed
+
+SAFETY LADDER (independent of AI - pure math):
+  -5%  CAUTION .... no new buys; exits allowed; auto-recovers
+  -10% HALT ....... sell everything; frozen until you run:
+                      py bot.py resume
+  -20% LOCKDOWN ... sell everything; frozen until you prove intent:
+                      py bot.py resume LOCKDOWN
+  Plus per-position stop-loss: any holding that falls -8%
+  below its buy price is force-closed before strategies
+  even get a vote.
+
+-----------------------------------------------------
+GOLDEN RULES
+-----------------------------------------------------
+1. This is PAPER money. Real-money dreams need months
+   of proven journal evidence first.
+2. Silence is normal. Patience is the strategy.
+3. Read lessons.txt sometimes - it is the bot's story.
+4. Never share real API keys with anyone.
