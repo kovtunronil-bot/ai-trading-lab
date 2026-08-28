@@ -11,7 +11,7 @@ from datetime import datetime
 def learn_from_open_trades():
     """Record current open trades so we have strategy labels for when they close."""
     from alpaca.trading.client import TradingClient
-    from keys import API_KEY, SECRET_KEY
+    API_KEY, SECRET_KEY = brain.api_creds() or (None, None)
     try:
         client = TradingClient(API_KEY, SECRET_KEY, paper=True)
         positions = list(client.get_all_positions())

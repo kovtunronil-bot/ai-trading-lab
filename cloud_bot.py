@@ -116,11 +116,80 @@ def run_cloud():
     brain.save_state(state)
     peak = float(state["peak_equity"])
     drawdown = equity / peak - 1
-
     breaker_level = None
     for threshold, name in brain.CIRCUIT_BREAKERS:
         if drawdown <= threshold:
             breaker_level = name
+
+    # INDEPENDENT RISK MANAGER: stop-loss, profit-lock, flat-exit, lockdown.
+    # (Parity with bot.py — the cloud bot must not hold losers forever.)
+    def _close_and_learn(p, reason, cur_price):
+        internal = brain.internal_sym(p.symbol)
+        entry = float(p.avg_entry_price)
+        try:
+            client.close_position(p.symbol)
+        except Exception as e:
+            print(f"    close {p.symbol} failed: {e}")
+            return
+        brain.clear_position_peak(internal)
+        _lbl = brain.pop_position_strategy(internal)
+        brain.log_closed_trade(internal, _lbl, entry, cur_price)
+        brain.analyze_trade_outcome(internal, _lbl, entry, cur_price,
+                                    brain.current_regime(all_data.get(internal, pd.DataFrame())))
+        try:
+            _df = all_data.get(internal, pd.DataFrame())
+            _regime = brain.current_regime(_df)
+            _pattern = brain.hash_pattern(_df, _regime) if not _df.empty else None
+            brain.learn_on_exit(internal, entry, cur_price, _regime, _pattern)
+        except Exception:
+            pass
+        msg = f"{p.symbol} {reason} ({(cur_price/entry-1)*100:+.1f}%)"
+        print(f"  {reason}: {msg}")
+        brain.log_journal(internal, cur_price, reason[:20], msg[:100], equity)
+        brain.send_alert(f"{reason} | {msg}")
+        try:
+            positions.remove(p)
+        except ValueError:
+            pass
+
+    for p in list(positions):
+        internal = brain.internal_sym(p.symbol)
+        entry = float(p.avg_entry_price)
+        cur = float(p.current_price)
+        if entry <= 0:
+            continue
+        # 1) hard stop-loss
+        if cur < entry * (1 - brain.POSITION_STOP_LOSS):
+            if internal not in brain.CRYPTO and not market_open:
+                print(f"  STOPLOSS HIT {p.symbol} but market closed — next open run")
+                continue
+            _close_and_learn(p, "STOPLOSS", cur)
+        else:
+            # 2) profit-lock / trailing stop on winners
+            peak = brain.update_position_peak(internal, cur, entry)
+            if brain.profit_lock_hit(entry, cur, peak):
+                if internal not in brain.CRYPTO and not market_open:
+                    print(f"  {p.symbol} profit-lock hit but market closed — next open run")
+                    continue
+                _close_and_learn(p, "PROFIT-LOCK", cur)
+            # 3) flat (stale) trade exit
+            elif brain.is_flat_trade(p):
+                if internal not in brain.CRYPTO and not market_open:
+                    print(f"  {p.symbol} flat {brain.days_in_trade(p)}d — next open run")
+                    continue
+                _close_and_learn(p, "FLAT-EXIT", cur)
+
+    if breaker_level == "LOCKDOWN":
+        print("!!! LOCKDOWN — selling everything !!!")
+        for p in list(positions):
+            try:
+                client.close_position(p.symbol)
+                brain.log_journal(brain.internal_sym(p.symbol), 0.0, "LOCKDOWN-SELL",
+                                  f"closed {p.qty} x {p.symbol}", equity)
+            except Exception as e:
+                print(f"  close {p.symbol} failed: {e}")
+        state["halted"] = True
+        state["lockdown"] = True
 
     allow_entries = breaker_level != "CAUTION"
 

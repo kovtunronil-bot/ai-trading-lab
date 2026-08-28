@@ -12,6 +12,21 @@ SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "GLD",
 CRYPTO = {"BTC/USD": "BTC-USD", "ETH/USD": "ETH-USD"}
 
 
+def api_creds():
+    """Return (API_KEY, SECRET_KEY). Prefer env vars (GitHub Actions cloud),
+    fall back to keys.py (local dev)."""
+    import os
+    key = os.environ.get("APCA_API_KEY_ID", "") or os.environ.get("API_KEY", "")
+    secret = os.environ.get("APCA_API_SECRET_KEY", "") or os.environ.get("SECRET_KEY", "")
+    if key and secret:
+        return key, secret
+    try:
+        from keys import API_KEY, SECRET_KEY
+        return API_KEY, SECRET_KEY
+    except Exception:
+        return None, None
+
+
 def alpaca_sym(symbol):
     return symbol.replace("/", "").replace("-", "")
 
@@ -669,8 +684,10 @@ def auto_adjust_strategy(symbol):
         # under an open position could strand or mis-exit the trade.
         try:
             from alpaca.trading.client import TradingClient
-            from keys import API_KEY, SECRET_KEY
-            _client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+            _k, _s = api_creds()
+            if not _k or not _s:
+                return None, "no api creds"
+            _client = TradingClient(_k, _s, paper=True)
             _hp = {p.symbol for p in _client.get_all_positions()}
             if alpaca_sym(symbol) in _hp or symbol in _hp:
                 return None, f"{symbol} currently held — deferring strategy switch"

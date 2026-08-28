@@ -5,7 +5,8 @@ import yfinance as yf
 import brain
 
 from alpaca.trading.client import TradingClient
-from keys import API_KEY, SECRET_KEY
+
+API_KEY, SECRET_KEY = brain.api_creds() or (None, None)
 
 
 CRYPTO_MARKETS = ["BTC/USD", "ETH/USD"]
