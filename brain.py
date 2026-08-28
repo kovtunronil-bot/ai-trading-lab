@@ -1283,21 +1283,21 @@ def adaptive_params(df):
         vol_ratio = vol / avg_vol if avg_vol > 0 else 1.0
         params = {}
         if vol_ratio > 1.5:
-            params["rsi_buy"] = 15
+            params["rsi_buy"] = 25
             params["rsi_sell"] = 65
             params["ema_fast"] = 12
             params["ema_slow"] = 26
             params["atr_mult"] = 1.5
             params["note"] = "high-vol: wider thresholds"
         elif vol_ratio < 0.7:
-            params["rsi_buy"] = 8
+            params["rsi_buy"] = 20
             params["rsi_sell"] = 55
             params["ema_fast"] = 7
             params["ema_slow"] = 18
             params["atr_mult"] = 0.75
             params["note"] = "low-vol: tighter thresholds"
         else:
-            params["rsi_buy"] = 10
+            params["rsi_buy"] = 24
             params["rsi_sell"] = 60
             params["ema_fast"] = 9
             params["ema_slow"] = 21
@@ -1305,7 +1305,7 @@ def adaptive_params(df):
             params["note"] = "normal-vol: standard"
         return params
     except Exception:
-        return {"rsi_buy": 10, "rsi_sell": 60, "ema_fast": 9, "ema_slow": 21,
+        return {"rsi_buy": 24, "rsi_sell": 60, "ema_fast": 9, "ema_slow": 21,
                 "atr_mult": 1.0, "note": "fallback"}
 
 
@@ -1844,7 +1844,7 @@ def realized_vol(close):
     return float(v) if pd.notna(v) and v > 0 else None
 
 
-def vol_targeted_notional(vols, symbol, base=6500.0, floor=2500.0, cap=12000.0):
+def vol_targeted_notional(vols, symbol, base=8500.0, floor=3000.0, cap=15000.0):
     target = vols.get(symbol)
     med = float(pd.Series([v for v in vols.values() if v]).median()) if any(vols.values()) else None
     if not target or not med:
