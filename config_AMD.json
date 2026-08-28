@@ -1,20 +1,10 @@
 {
-  "mode": "donchian",
-  "entry": 35,
-  "exit": 18,
-  "label": "AI-idea Donch35/18",
-  "ai_proposed": true,
+  "mode": "momentum",
+  "label": "Momentum 6m",
   "symbol": "AMD",
   "regime": "QUIET_RANGE",
   "test_score": 5.424224,
   "hold_test_score": 11.785,
-  "adaptive": {
-    "rsi_buy": 10,
-    "rsi_sell": 60,
-    "ema_fast": 9,
-    "ema_slow": 21,
-    "atr_mult": 1.0,
-    "note": "normal-vol: standard"
-  },
-  "updated": "2026-08-26T10:14:44"
+  "ai_proposed": true,
+  "updated": "2026-08-28T15:40:00"
 }

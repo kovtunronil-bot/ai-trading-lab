@@ -1,17 +1,9 @@
 {
-  "mode": "bollinger",
-  "label": "Bollinger dip",
+  "mode": "momentum",
+  "label": "Momentum 6m",
   "symbol": "AMZN",
   "regime": "BULL_TREND",
   "test_score": 2.729088,
   "hold_test_score": 4.286,
-  "adaptive": {
-    "rsi_buy": 15,
-    "rsi_sell": 65,
-    "ema_fast": 12,
-    "ema_slow": 26,
-    "atr_mult": 1.5,
-    "note": "high-vol: wider thresholds"
-  },
-  "updated": "2026-08-26T20:36:50"
+  "updated": "2026-08-28T15:40:00"
 }

@@ -1691,6 +1691,10 @@ def is_exit_signal(df, cfg):
         pdi, mdi = float(pdi_s.iloc[-1]), float(mdi_s.iloc[-1])
         return pdi < mdi
 
+    if mode == "momentum":
+        mom = float(close.pct_change(126).iloc[-1])
+        return mom < 0
+
     return False
 
 

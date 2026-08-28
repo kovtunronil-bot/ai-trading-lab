@@ -1,17 +1,9 @@
 {
-  "mode": "bollinger",
-  "label": "Bollinger dip",
+  "mode": "momentum",
+  "label": "Momentum 6m",
   "symbol": "AAPL",
   "regime": "BULL_TREND",
   "test_score": 2.465984,
   "hold_test_score": -1.304,
-  "adaptive": {
-    "rsi_buy": 10,
-    "rsi_sell": 60,
-    "ema_fast": 9,
-    "ema_slow": 21,
-    "atr_mult": 1.0,
-    "note": "normal-vol: standard"
-  },
-  "updated": "2026-08-26T20:36:48"
+  "updated": "2026-08-28T15:40:00"
 }
