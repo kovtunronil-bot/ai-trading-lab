@@ -634,6 +634,10 @@ def analyze_trade_outcome(symbol, strategy, entry, exit_price, regime):
                      (datetime.now().isoformat(timespec="seconds"), lesson))
         conn.commit()
         conn.close()
+        try:
+            tune_config(symbol, pnl_pct, regime=regime)
+        except Exception:
+            pass
         return {"pnl": pnl_pct, "win_rate": win_rate, "total": total, "lesson": lesson}
     except Exception:
         return None
@@ -666,6 +670,102 @@ def strategy_performance(symbol=None, min_trades=2):
         return results
     except Exception:
         return {}
+
+
+def tune_config(symbol, pnl_pct, regime=None):
+    """Auto-tune a symbol's adaptive thresholds from its real trade outcome.
+
+    After a closed trade: tighten entries after losses (more selective),
+    relax modestly after wins. Bounded by TUNE_BOUNDS/TUNE_MAX_DELTA so the
+    thresholds can never drift into absurd territory. Only nudges once enough
+    trades exist so it doesn't chase single-trade noise.
+    """
+    try:
+        cfg = load_config(symbol)
+        if not cfg:
+            return None
+        if not isinstance(cfg.get("adaptive"), dict):
+            return None
+        # Require enough history before tuning (don't chase noise).
+        perf = strategy_performance(symbol)
+        cur_label = cfg.get("label", "")
+        cur = (perf or {}).get(cur_label)
+        n = (cur.get("n", 0) if cur else 0)
+        need = 3
+        tunable = []
+        mode = cfg.get("mode", "")
+        for key in cfg.get("adaptive", {}):
+            if key not in TUNE_BOUNDS:
+                continue
+            # Only tune params that this strategy actually uses.
+            if key == "rsi_buy" and mode not in ("rsi", "stoch"):
+                continue
+            if key == "rsi_sell" and mode not in ("rsi", "stoch"):
+                continue
+            if key == "ema_fast" and mode != "ema_cross":
+                continue
+            if key == "ema_slow" and mode != "ema_cross":
+                continue
+            if key == "atr_mult" and mode != "atr_breakout":
+                continue
+            tunable.append(key)
+        if not tunable:
+            return None
+        # Direction: losses tighten entries, wins relax them.
+        win = pnl_pct > 0
+        gained = pnl_pct > 4
+        lost_big = pnl_pct < -3
+        # If we already have evidence the strategy is failing, nudge harder.
+        sluggish = bool((n >= need) and cur and cur["win_rate"] < 0.40)
+        step = 0
+        if lost_big or sluggish:
+            step = -2 if not sluggish else -3
+        elif win and not gained:
+            step = 0
+        elif gained:
+            step = 1
+        else:
+            step = 0
+        if step == 0 and n < need:
+            return None
+        tuned = cfg["adaptive"].get("tuned", {})
+        changes = []
+        for key in tunable:
+            if step == 0:
+                continue
+            # tighten after losses (lower rsi_buy = more selective dip),
+            # relax only after a big win.
+            delta = step  # same delta for all tunable params for this symbol
+            old = tuned.get(key, 0) or 0
+            new_delta = old + delta
+            if key == "rsi_buy":
+                new_delta = max(-12, min(6, new_delta))
+            elif key == "rsi_sell":
+                new_delta = max(-6, min(12, new_delta))
+            elif key == "atr_mult":
+                new_delta = max(-0.5, min(0.5, new_delta))
+            else:  # ema params
+                new_delta = max(-6, min(6, new_delta))
+            if new_delta != old:
+                tuned[key] = round(new_delta, 3)
+                changes.append(f"{key}{new_delta:+.0f}")
+        if not changes:
+            return None
+        cfg["adaptive"]["tuned"] = tuned
+        cfg["updated"] = datetime.now().isoformat(timespec="seconds")
+        save_config(cfg)
+        lesson = (f"[{datetime.now():%Y-%m-%d %H:%M}] AUTO-TUNE {symbol} "
+                  f"{cfg.get('label','?')} pnl={pnl_pct:+.1f}% (wr={(cur['win_rate']*100) if cur else 0:.0f}%, "
+                  f"n={n}): {'tighten' if step<0 else 'relax'} {', '.join(changes)}")
+        conn = init_db()
+        conn.execute("INSERT INTO lessons(ts,text) VALUES(?,?)",
+                     (datetime.now().isoformat(timespec="seconds"), lesson))
+        conn.commit()
+        conn.close()
+        print(f"  AUTO-TUNE: {lesson}" if not regime else f"  AUTO-TUNE [{regime}]: {lesson}")
+        return lesson
+    except Exception as e:
+        return None
 
 
 def auto_adjust_strategy(symbol):
@@ -1307,7 +1407,19 @@ def candidates():
     return cands
 
 
-def adaptive_params(df):
+# Bounds for auto-tuning so thresholds can never drift into absurd territory.
+TUNE_BOUNDS = {
+    "rsi_buy": (5, 30),
+    "rsi_sell": (50, 80),
+    "ema_fast": (3, 25),
+    "ema_slow": (8, 60),
+    "atr_mult": (0.3, 3.0),
+}
+# How far from the regime baseline a per-symbol learned shift may go.
+TUNE_MAX_DELTA = 6
+
+
+def adaptive_params(df, cfg=None):
     try:
         close = df["Close"]
         vol = realized_vol(close)
@@ -1335,6 +1447,19 @@ def adaptive_params(df):
             params["ema_slow"] = 21
             params["atr_mult"] = 1.0
             params["note"] = "normal-vol: standard"
+        # Apply any per-symbol learned shifts (auto-tuned) on top of the
+        # regime baseline so what the bot learned actually takes effect.
+        if cfg and cfg.get("adaptive") and cfg["adaptive"].get("tuned"):
+            tuned = cfg["adaptive"]["tuned"]
+            for key, delta in tuned.items():
+                if key in params and isinstance(delta, (int, float)):
+                    base = params[key]
+                    lo, hi = TUNE_BOUNDS.get(key, (None, None))
+                    target = base + delta
+                    target = max(lo, min(hi, target)) if lo is not None else target
+                    if abs(target - base) <= TUNE_MAX_DELTA:
+                        params[key] = round(target, 3)
+                        params["note"] = f"{params.get('note','')} | tuned {key}{delta:+.0f}"
         return params
     except Exception:
         return {"rsi_buy": 24, "rsi_sell": 60, "ema_fast": 9, "ema_slow": 21,
@@ -1537,7 +1662,7 @@ def current_state(df, cfg):
     price = float(close.iloc[-1])
     notes = []
     mode = cfg["mode"]
-    ap = adaptive_params(df)
+    ap = adaptive_params(df, cfg)
 
     if mode == "hold":
         return True, "always", "-", []
@@ -1662,7 +1787,7 @@ def is_exit_signal(df, cfg):
     close = df["Close"]
     price = float(close.iloc[-1])
     mode = cfg["mode"]
-    ap = adaptive_params(df)
+    ap = adaptive_params(df, cfg)
 
     if mode == "hold":
         return False
