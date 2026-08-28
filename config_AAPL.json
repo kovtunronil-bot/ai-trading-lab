@@ -2,8 +2,16 @@
   "mode": "momentum",
   "label": "Momentum 6m",
   "symbol": "AAPL",
-  "regime": "BULL_TREND",
+  "regime": "QUIET_RANGE",
   "test_score": 2.465984,
-  "hold_test_score": -1.304,
-  "updated": "2026-08-28T15:40:00"
+  "hold_test_score": -99.0,
+  "updated": "2026-08-28T14:16:51",
+  "adaptive": {
+    "rsi_buy": 20,
+    "rsi_sell": 55,
+    "ema_fast": 7,
+    "ema_slow": 18,
+    "atr_mult": 0.75,
+    "note": "low-vol: tighter thresholds"
+  }
 }
