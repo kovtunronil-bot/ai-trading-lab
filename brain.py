@@ -170,6 +170,9 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ts TEXT, symbol TEXT, pattern_hash TEXT,
         conditions TEXT, outcome_pnl REAL, regime TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS ai_news(
+        symbol TEXT, ts TEXT, verdict TEXT, reason TEXT, source TEXT,
+        PRIMARY KEY (symbol, ts))""")
     return conn
 
 
