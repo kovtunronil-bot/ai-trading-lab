@@ -4,7 +4,7 @@ import yfinance as yf
 import brain
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "llama3.1"
+MODEL = "llama3.1:8b"
 
 
 def fetch_headlines(symbol, limit=4):
