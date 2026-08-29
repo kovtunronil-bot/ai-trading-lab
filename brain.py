@@ -768,6 +768,45 @@ def tune_config(symbol, pnl_pct, regime=None):
         return None
 
 
+# Losing-strategy safety exit: when a held symbol's strategy is statistically
+# failing, cut losses earlier instead of trusting its weak exit signal.
+FAILING_WR = 0.40
+FAILING_MIN_TRADES = 5
+FAILING_STOP = 0.04   # tighter stop for failing strategies
+FAILING_FLAT_DAYS = 6  # exit a failing-strategy flat position sooner
+
+
+def strategy_quality(symbol):
+    """Return (grade, win_rate, n_trades) of the symbol's current strategy.
+
+    Returns (None, None, 0) when there's not enough evidence yet."""
+    try:
+        cfg = load_config(symbol)
+        if not cfg:
+            return None, None, 0
+        perf = strategy_performance(symbol)
+        cur_label = cfg.get("label", "")
+        info = (perf or {}).get(cur_label)
+        if not info:
+            return None, None, 0
+        return info["grade"], info["win_rate"], info["n"]
+    except Exception:
+        return None, None, 0
+
+
+def strategy_is_failing(symbol):
+    """True when the held symbol's current strategy has proven losing odds.
+
+    Either graded D/F outright, or a win-rate below FAILING_WR with enough
+    sampled trades to be meaningful."""
+    grade, wr, n = strategy_quality(symbol)
+    if grade in ("D", "F"):
+        return True
+    if wr is not None and n >= FAILING_MIN_TRADES and wr < FAILING_WR:
+        return True
+    return False
+
+
 def auto_adjust_strategy(symbol):
     try:
         perf = strategy_performance(symbol)

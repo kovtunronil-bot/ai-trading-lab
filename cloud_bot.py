@@ -158,12 +158,17 @@ def run_cloud():
         cur = float(p.current_price)
         if entry <= 0:
             continue
-        # 1) hard stop-loss
-        if cur < entry * (1 - brain.POSITION_STOP_LOSS):
+        # Adaptive safety exit: a held symbol on a statistically failing
+        # strategy gets a tighter stop so we don't ride losers via its weak
+        # sell logic (e.g. MSFT EMA9/21 at 32% win-rate).
+        failing = brain.strategy_is_failing(internal)
+        stop_fraction = brain.FAILING_STOP if failing else brain.POSITION_STOP_LOSS
+        # 1) hard stop-loss (adaptive to strategy quality)
+        if cur < entry * (1 - stop_fraction):
             if internal not in brain.CRYPTO and not market_open:
                 print(f"  STOPLOSS HIT {p.symbol} but market closed — next open run")
                 continue
-            _close_and_learn(p, "STOPLOSS", cur)
+            _close_and_learn(p, f"STOPLOSS{'[FAILING]' if failing else ''}", cur)
         else:
             # 2) profit-lock / trailing stop on winners
             peak = brain.update_position_peak(internal, cur, entry)
@@ -172,8 +177,11 @@ def run_cloud():
                     print(f"  {p.symbol} profit-lock hit but market closed — next open run")
                     continue
                 _close_and_learn(p, "PROFIT-LOCK", cur)
-            # 3) flat (stale) trade exit
-            elif brain.is_flat_trade(p):
+            # 3) flat (stale) trade exit (sooner for failing strategies)
+            flat_days = brain.FAILING_FLAT_DAYS if failing else None
+            flat_ok = (brain.is_flat_trade(p, max_days=flat_days)
+                       if flat_days is not None else brain.is_flat_trade(p))
+            if flat_ok:
                 if internal not in brain.CRYPTO and not market_open:
                     print(f"  {p.symbol} flat {brain.days_in_trade(p)}d — next open run")
                     continue
