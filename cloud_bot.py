@@ -67,7 +67,7 @@ def smart_buy(symbol, notional, ref_price):
             qty=round(float(notional) / max(ref_price, 1e-9), 4)))
         time.sleep(5)
         o = client.get_order(o.id)
-        return o.id, str(o.status), float(o.filled_avg_price) if o.filled_avg_price else ref_price
+        return o.id, str(o.status), float(o.filled_avg_price) if o.filled_avg_price else None
     except Exception as e:
         return None, "error", None
 
@@ -79,7 +79,7 @@ def smart_sell(symbol, qty, ref_price):
             symbol=symbol, side=OrderSide.SELL, time_in_force=tif, qty=float(qty)))
         time.sleep(5)
         o = client.get_order(o.id)
-        return o.id, str(o.status), float(o.filled_avg_price) if o.filled_avg_price else ref_price
+        return o.id, str(o.status), float(o.filled_avg_price) if o.filled_avg_price else None
     except Exception as e:
         return None, "error", None
 
@@ -171,8 +171,8 @@ def run_cloud():
             _close_and_learn(p, f"STOPLOSS{'[FAILING]' if failing else ''}", cur)
         else:
             # 2) profit-lock / trailing stop on winners
-            peak = brain.update_position_peak(internal, cur, entry)
-            if brain.profit_lock_hit(entry, cur, peak):
+            pos_peak = brain.update_position_peak(internal, cur, entry)
+            if brain.profit_lock_hit(entry, cur, pos_peak):
                 if internal not in brain.CRYPTO and not market_open:
                     print(f"  {p.symbol} profit-lock hit but market closed — next open run")
                     continue
@@ -284,34 +284,49 @@ def run_cloud():
 
                     if action == "WAIT":
                         oid, st, fill_price = smart_buy(symbol, sized_notional, price)
-                        action, detail = "BUY", f"${sized_notional:,.0f} conv={conviction:.0%}"
-                        brain.set_position_strategy(symbol, cfg.get("label", "?"))
-                        brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "BUY",
-                                        sized_notional, None, None, st, "smart-limit",
-                                        fill_price=fill_price, signal_price=price,
-                                        strategy=cfg.get("label", "?"))
-                        deployed += sized_notional
+                        if st == "filled" and fill_price:
+                            brain.set_position_strategy(symbol, cfg.get("label", "?"))
+                            action, detail = "BUY", f"${sized_notional:,.0f} conv={conviction:.0%}"
+                            brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "BUY",
+                                            sized_notional, None, None, st, "smart-limit",
+                                            fill_price=fill_price, signal_price=price,
+                                            strategy=cfg.get("label", "?"))
+                            deployed += sized_notional
+                        else:
+                            # not filled yet — record intent (fill_price=None) so a
+                            # later reconcile_trades pass can match and fill it.
+                            action, detail = "BUY-QUEUED", f"{symbol} order {st or 'err'} — will reconcile"
+                            brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "BUY",
+                                            sized_notional, None, None, st or "queued", "smart-limit",
+                                            fill_price=None, signal_price=price,
+                                            strategy=cfg.get("label", "?"))
 
             elif holding is not None and brain.is_exit_signal(df, cfg) and cfg.get("mode") != "hold":
-                qty = holding.qty
-                oid, st, fill_price = smart_sell(symbol, qty, price)
-                brain.clear_position_peak(symbol)
-                action, detail = "SELL", f"exit signal: {qty} x {symbol}"
-                _label = brain.pop_position_strategy(symbol)
-                brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "SELL",
-                                None, float(qty), None, st, "smart-limit",
-                                fill_price=fill_price, signal_price=price,
-                                strategy=_label)
-                brain.log_closed_trade(symbol, _label, float(holding.avg_entry_price), fill_price or price)
-                brain.analyze_trade_outcome(symbol, _label, float(holding.avg_entry_price),
-                                            fill_price or price, live_regime)
-                try:
-                    brain.learn_on_exit(symbol, float(holding.avg_entry_price),
-                                        fill_price or price, live_regime,
-                                        brain.hash_pattern(df, live_regime) if not df.empty else None)
-                except Exception:
-                    pass
-                brain.send_alert(f"SELL {symbol} ({_label})")
+                if symbol not in brain.CRYPTO and not market_open:
+                    action, detail = "SELL-PENDING", "exit signal — market closed, sell next open"
+                else:
+                    qty = holding.qty
+                    oid, st, fill_price = smart_sell(symbol, qty, price)
+                    if st == "filled" and fill_price:
+                        brain.clear_position_peak(symbol)
+                        action, detail = "SELL", f"exit signal: {qty} x {symbol}"
+                        _label = brain.pop_position_strategy(symbol)
+                        brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "SELL",
+                                        None, float(qty), None, st, "smart-limit",
+                                        fill_price=fill_price, signal_price=price,
+                                        strategy=_label)
+                        brain.log_closed_trade(symbol, _label, float(holding.avg_entry_price), fill_price)
+                        brain.analyze_trade_outcome(symbol, _label, float(holding.avg_entry_price),
+                                                    fill_price, live_regime)
+                        try:
+                            brain.learn_on_exit(symbol, float(holding.avg_entry_price),
+                                                fill_price, live_regime,
+                                                brain.hash_pattern(df, live_regime) if not df.empty else None)
+                        except Exception:
+                            pass
+                        brain.send_alert(f"SELL {symbol} ({_label})")
+                    else:
+                        action, detail = "SELL-QUEUED", f"{symbol} order {st or 'err'} — position still open"
 
             elif holding is not None:
                 action, detail = "HOLD", f"{holding.qty} x {symbol}"
@@ -334,6 +349,21 @@ def run_cloud():
         print("  learning complete")
     except Exception as e:
         print(f"  learn error: {e}")
+
+    # Reconcile any orders that were queued earlier and have since filled.
+    try:
+        from alpaca.trading.requests import GetOrdersRequest
+        from alpaca.trading.enums import QueryOrderStatus
+        filled_orders = client.get_orders(GetOrdersRequest(
+            status=QueryOrderStatus.CLOSED, limit=100))
+        fixed = brain.reconcile_trades(filled_orders)
+        for sym, side, fill, slip in fixed:
+            print(f"  reconciled: {side} {sym} filled @ ${fill}")
+        pos_fixed = brain.reconcile_with_positions(list(client.get_all_positions()))
+        for sym, side, fill, slip in pos_fixed:
+            print(f"  reconciled (position): {side} {sym} @ ${fill}")
+    except Exception as e:
+        print(f"  reconcile skipped: {e}")
 
     print(f"\nFinal equity: ${equity:,.2f}")
 

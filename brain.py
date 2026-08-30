@@ -2079,15 +2079,18 @@ def correlation_gate(closes, symbol, held_symbols, threshold=0.70, max_alike=2):
 
 def send_alert(message):
     import os
-    try:
-        from keys import NTFY_TOPIC
-    except ImportError:
-        return
-    if not NTFY_TOPIC:
+    topic = os.environ.get("NTFY_TOPIC", "")
+    if not topic:
+        try:
+            from keys import NTFY_TOPIC
+            topic = NTFY_TOPIC
+        except Exception:
+            return
+    if not topic:
         return
     try:
         import requests
-        requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=message.encode("utf-8"), timeout=6)
+        requests.post(f"https://ntfy.sh/{topic}", data=message.encode("utf-8"), timeout=6)
     except Exception:
         pass
 
