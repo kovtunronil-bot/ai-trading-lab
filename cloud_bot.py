@@ -108,7 +108,7 @@ def run_cloud():
     account = client.get_account()
     equity = float(account.equity)
     positions = list(client.get_all_positions())
-    held_symbols = [p.symbol for p in positions]
+    held_symbols = [brain.internal_sym(p.symbol) for p in positions]
 
     state = brain.load_state()
     if state["peak_equity"] is None or equity > state["peak_equity"]:
@@ -275,12 +275,44 @@ def run_cloud():
                         print(f">>> DRAWDOWN-CONSERVATIVE: sizing down to 55%")
                     if action == "WAIT":
                         sized_notional = max(200, planned_notional * conviction * size_mult)
+                        # Pattern memory veto: skip if similar past setups lost money.
                         try:
-                            verdict, reason = news_mod.sentiment(symbol) if news_mod else ("NEUTRAL", "no news module")
-                            if verdict == "BEARISH":
-                                action, detail = "NEWS-BLOCKED", reason[:60]
+                            pat = brain.hash_pattern(df, live_regime)
+                            hist = brain.check_pattern_memory(symbol, pat)
+                            if hist is not None and hist < -2:
+                                action, detail = "PATTERN-MEM", f"similar setups averaged {hist:+.1f}%"
                         except Exception:
                             pass
+
+                    if action == "WAIT":
+                        # Diversification: don't over-concentrate in correlated assets.
+                        try:
+                            gate = brain.correlation_gate(closes, symbol, held_symbols)
+                            if gate["blocked"]:
+                                action, detail = "CORR-BLOCKED", f"{gate['alike']} held assets >70% correlated"
+                            elif gate["alike"] == 1:
+                                conviction = max(0.0, conviction - 0.15)
+                                sized_notional = max(200, planned_notional * conviction * size_mult)
+                                print(f">>> CORR-PENALTY: 1 correlated hold -> conviction {conviction:.0%}")
+                        except Exception:
+                            pass
+
+                    if action == "WAIT":
+                        # AI news shield: prefer a stored night-runner verdict, else live.
+                        verdict, reason = None, ""
+                        try:
+                            st = brain.latest_ai_verdict(symbol)
+                            if st:
+                                verdict, reason, _age = st
+                        except Exception:
+                            pass
+                        if not verdict:
+                            try:
+                                verdict, reason = news_mod.sentiment(symbol) if news_mod else ("NEUTRAL", "no news module")
+                            except Exception:
+                                verdict, reason = "NEUTRAL", ""
+                        if verdict == "BEARISH":
+                            action, detail = "NEWS-BLOCKED", reason[:60]
 
                     if action == "WAIT":
                         oid, st, fill_price = smart_buy(symbol, sized_notional, price)

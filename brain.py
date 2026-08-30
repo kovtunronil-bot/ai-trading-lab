@@ -921,6 +921,31 @@ def check_pattern_memory(symbol, pattern_hash, min_trades=3):
         return None
 
 
+def latest_ai_verdict(symbol, max_age_hours=24):
+    """Return the most recent stored AI news verdict for a symbol as
+    (verdict, reason, age_hours), or None if none within max_age_hours.
+    Stored by the local night_runner via news.record_ai_sentiments(); the
+    cloud reads it here so the AI actually influences decisions."""
+    try:
+        conn = init_db()
+        row = conn.execute(
+            """SELECT verdict, reason, ts FROM ai_news
+               WHERE symbol=? ORDER BY ts DESC LIMIT 1""", (symbol,)).fetchone()
+        conn.close()
+        if not row:
+            return None
+        verdict, reason, ts = row
+        try:
+            age = (datetime.now() - datetime.fromisoformat(ts)).total_seconds() / 3600.0
+        except Exception:
+            age = 999
+        if age > max_age_hours:
+            return None
+        return verdict, reason or "", round(age, 1)
+    except Exception:
+        return None
+
+
 def log_pattern(symbol, pattern_hash, outcome_pnl, regime):
     try:
         conn = init_db()
