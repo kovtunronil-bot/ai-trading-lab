@@ -44,10 +44,16 @@ def ollama_up():
 
 def git_push():
     """Commit any DB/config changes and push to origin master (cloud reads them)."""
+    import glob
     try:
-        subprocess.run(["git", "add", "lab.db", "config_*.json", "state.json",
-                        "proposals.json", "positions_snapshot.json"],
-                       check=True)
+        # Expand globs in Python (Windows subprocess does not shell-expand *)
+        files = ["lab.db", "state.json", "proposals.json", "positions_snapshot.json"]
+        files += glob.glob("config_*.json")
+        files = [f for f in files if os.path.exists(f)]
+        if not files:
+            print("  git: nothing to add")
+            return True
+        subprocess.run(["git", "add"] + files, check=True)
         # exit 0 if nothing to commit
         r = subprocess.run(["git", "diff", "--cached", "--quiet"])
         if r.returncode == 0:
