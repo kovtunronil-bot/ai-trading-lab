@@ -9,6 +9,7 @@ the runner skips the Ollama news pass (and optionally pauses) until it's free.
 Everything here is read-only / measurement only — it never changes anything.
 """
 import ctypes
+import ctypes.wintypes
 import time
 
 
