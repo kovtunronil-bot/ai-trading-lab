@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import brain
 import news
+import idle_check
 
 
 def ollama_up():
@@ -76,9 +77,32 @@ def run_night():
     print("NIGHT RUNNER (local) — %s" % brain.datetime.now().isoformat(timespec="seconds"))
     print("=" * 60)
 
+    # 0) Idle gate: if the PC is busy (fullscreen game / GPU or CPU hogged),
+    #    skip the heavy local AI pass so it never interferes with the user.
+    #    The normal trading engine (lightweight, cloud-parity) still runs.
+    #    We retry a few times (brief waits) in case the user closes the game.
+    MAX_ATTEMPTS = 3
+    WAIT_SECONDS = 40
+    busy_reasons = []
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        busy_reasons = idle_check.is_machine_busy()
+        if not busy_reasons:
+            break
+        print(f"\n[IDLE-CHECK attempt {attempt}/{MAX_ATTEMPTS}] busy: " + "; ".join(busy_reasons))
+        if attempt < MAX_ATTEMPTS:
+            print(f"   waiting {WAIT_SECONDS}s to re-check ...")
+            import time as _t
+            _t.sleep(WAIT_SECONDS)
+
+    if busy_reasons:
+        print("\n[IDLE-CHECK] machine still busy -> SKIPPING local AI pass this run.")
+        print("   (AI verdicts skipped; trading engine still runs)")
+    else:
+        print("\n[IDLE-CHECK] machine free -> will run local AI pass.")
+
     # 1) Local AI pass. If Ollama is down, still trade the normal engine but
     #    note that AI verdicts were skipped (don't fail the whole run).
-    if ollama_up():
+    if ollama_up() and not busy_reasons:
         print("\n[LOCAL OLLAMA AI — reading headlines for every market]")
         n = news.record_ai_sentiments(verbose=True)
         print(f"  recorded {n} AI verdicts to ai_news")
