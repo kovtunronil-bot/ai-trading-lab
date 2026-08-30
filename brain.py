@@ -946,6 +946,22 @@ def latest_ai_verdict(symbol, max_age_hours=24):
         return None
 
 
+def ai_exit_bearish(symbol, min_pnl_pct=0.0, max_age_hours=48):
+    """Return True if a recent stored AI news verdict for `symbol` is BEARISH
+    AND we are at/above `min_pnl_pct` profit. Used as a smart risk-managed exit:
+    the night-runner AI flags bad news, and the cloud closes a profitable hold
+    before the news drags it down — instead of waiting for the stop-loss.
+    Only acts when already in profit, so it never locks in a loss on opinion."""
+    try:
+        st = latest_ai_verdict(symbol, max_age_hours=max_age_hours)
+        if not st:
+            return False
+        verdict, _reason, _age = st
+        return verdict == "BEARISH"
+    except Exception:
+        return False
+
+
 def log_pattern(symbol, pattern_hash, outcome_pnl, regime):
     try:
         conn = init_db()

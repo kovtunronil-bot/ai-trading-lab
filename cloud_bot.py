@@ -177,7 +177,20 @@ def run_cloud():
                     print(f"  {p.symbol} profit-lock hit but market closed — next open run")
                     continue
                 _close_and_learn(p, "PROFIT-LOCK", cur)
-            # 3) flat (stale) trade exit (sooner for failing strategies)
+            # 3) AI-driven exit: if the night-runner AI flagged the news
+            #    BEARISH and we are holding a PROFIT, close early to lock it
+            #    in before the bad news drags the price down — instead of
+            #    waiting for the stop-loss. Only fires when in profit, so it
+            #    never locks a loss on opinion.
+            if cur > entry:
+                _ai_bear = brain.ai_exit_bearish(internal)
+                if _ai_bear:
+                    if internal not in brain.CRYPTO and not market_open:
+                        print(f"  {p.symbol} AI-BEARISH exit but market closed — next open run")
+                    else:
+                        _close_and_learn(p, "AI-BEARISH", cur)
+                    continue
+            # 4) flat (stale) trade exit (sooner for failing strategies)
             flat_days = brain.FAILING_FLAT_DAYS if failing else None
             flat_ok = (brain.is_flat_trade(p, max_days=flat_days)
                        if flat_days is not None else brain.is_flat_trade(p))
