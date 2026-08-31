@@ -41,4 +41,4 @@ jobs:
         git add lab.db config_*.json state.json proposals.json
         git diff --cached --quiet && exit 0
         git commit -m "bot update $(date -u +%Y-%m-%dT%H:%M)"
-        git push "https://x-access-token:${GH_TOKEN}@github.com/kovtunronil-bot/ai-trading-lab.git" HEAD:master
+        git push origin HEAD:master
