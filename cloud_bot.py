@@ -253,6 +253,15 @@ def run_cloud():
         planned_notional = brain.vol_targeted_notional(vols, symbol)
         conviction = brain.conviction_score(symbol, cfg, regime=live_regime)
         recent_mom = brain.recent_momentum(df)
+
+        # CRYPTO BOOST: crypto (BTC/ETH) trades have won ~6x the average of
+        # stocks (+15.7% vs +2.4% per trade) and trade 24/7, so we allocate a
+        # larger position to them. Boosting planned_notional means every later
+        # sizing recalculation inherits it; heat/sector caps still protect us.
+        if symbol in brain.CRYPTO:
+            planned_notional *= 1.8
+            print(f">>> CRYPTO-BOOST {symbol}: planned ${planned_notional:,.0f} (1.8x)")
+
         sized_notional = planned_notional * conviction
 
         if recent_mom < -0.03:
