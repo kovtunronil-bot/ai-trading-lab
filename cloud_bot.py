@@ -294,6 +294,21 @@ def run_cloud():
                             hist = brain.check_pattern_memory(symbol, pat)
                             if hist is not None and hist < -2:
                                 action, detail = "PATTERN-MEM", f"similar setups averaged {hist:+.1f}%"
+                            elif hist is not None:
+                                # Learned size boost: this exact pattern already
+                                # WON/WON-lost money in the past -> size accordingly.
+                                # (Boost confidence on winners, trim on mild losers.)
+                                if hist >= 2.0:
+                                    conviction = min(1.0, conviction + 0.12)
+                                    sized_notional = max(200, planned_notional * conviction * size_mult)
+                                    print(f">>> PATTERN-BOOST: pattern hist {hist:+.1f}% -> conviction {conviction:.0%}, ${sized_notional:,.0f}")
+                                elif hist >= 0.5:
+                                    conviction = min(1.0, conviction + 0.05)
+                                    sized_notional = max(200, planned_notional * conviction * size_mult)
+                                elif hist < 0:
+                                    conviction = max(0.0, conviction - 0.10)
+                                    sized_notional = max(200, planned_notional * conviction * size_mult)
+                                    print(f">>> PATTERN-TRIM: pattern hist {hist:+.1f}% -> conviction {conviction:.0%}, ${sized_notional:,.0f}")
                         except Exception:
                             pass
 
