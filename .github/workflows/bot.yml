@@ -2,7 +2,7 @@ name: AI Trading Robot
 
 on:
   schedule:
-    - cron: '15 0,2,4,6,8,10,12,14,16,18,20,22 * * *'   # Every 2 hours (UTC)
+    - cron: '15 * * * *'                                  # Every hour (UTC)
   workflow_dispatch:                       # Manual trigger button
 
 jobs:
