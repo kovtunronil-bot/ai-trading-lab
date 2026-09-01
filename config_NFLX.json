@@ -1,11 +1,13 @@
 {
-  "mode": "adx",
-  "threshold": 20,
-  "label": "ADX>20 trend-on",
+  "mode": "atr_breakout",
+  "entry": 20,
+  "exit": 10,
+  "mult": 0.5,
+  "label": "ATRbrk 20d x0.5",
   "symbol": "NFLX",
-  "regime": "BEAR_TREND",
-  "test_score": 4.037368,
-  "hold_test_score": -4.027,
+  "regime": "QUIET_RANGE",
+  "test_score": 14.168032000000002,
+  "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 24,
     "rsi_sell": 60,
@@ -14,5 +16,5 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-08-31T00:30:19"
+  "updated": "2026-09-01T12:29:09"
 }

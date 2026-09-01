@@ -4,16 +4,16 @@
   "slow": 21,
   "label": "EMA9/21",
   "symbol": "MSFT",
-  "regime": "BULL_TREND",
+  "regime": "QUIET_RANGE",
   "test_score": 2.2866720000000003,
   "hold_test_score": -99.0,
   "adaptive": {
-    "rsi_buy": 24,
-    "rsi_sell": 60,
-    "ema_fast": 9,
-    "ema_slow": 21,
-    "atr_mult": 1.0,
-    "note": "normal-vol: standard"
+    "rsi_buy": 20,
+    "rsi_sell": 55,
+    "ema_fast": 7,
+    "ema_slow": 18,
+    "atr_mult": 0.75,
+    "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-08-31T00:30:16"
+  "updated": "2026-09-01T12:29:09"
 }

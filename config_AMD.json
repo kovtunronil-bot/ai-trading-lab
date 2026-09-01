@@ -4,9 +4,9 @@
   "symbol": "AMD",
   "regime": "QUIET_RANGE",
   "test_score": 5.424224,
-  "hold_test_score": 10.657,
+  "hold_test_score": 10.824,
   "ai_proposed": true,
-  "updated": "2026-08-31T00:30:17",
+  "updated": "2026-09-01T12:29:06",
   "adaptive": {
     "rsi_buy": 24,
     "rsi_sell": 60,

@@ -1,13 +1,14 @@
 {
   "mode": "rsi",
-  "period": 5,
-  "buy_below": 30,
-  "sell_above": 65,
-  "label": "RSI5 <30/65",
+  "period": 3,
+  "buy_below": 15,
+  "sell_above": 60,
+  "trend": 100,
+  "label": "RSI3 <15/60 +trend100",
   "symbol": "NVDA",
-  "regime": "BULL_TREND",
-  "test_score": 7.96348,
-  "hold_test_score": 3.803,
+  "regime": "QUIET_RANGE",
+  "test_score": 1080.888864,
+  "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 24,
     "rsi_sell": 60,
@@ -16,5 +17,5 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-08-31T00:30:31"
+  "updated": "2026-09-01T12:29:09"
 }
