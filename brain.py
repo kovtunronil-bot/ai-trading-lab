@@ -1052,6 +1052,17 @@ def momentum_score(df):
         return 0.0
 
 
+def avg_atr(df):
+    """Latest ATR(14) as a float, or None if the frame is unusable."""
+    try:
+        if df is None or df.empty:
+            return None
+        s = _atr14(df).dropna()
+        return float(s.iloc[-1]) if len(s) else None
+    except Exception:
+        return None
+
+
 def trailing_profit_targets(entry_price, current_price, side="long", atr=None):
     try:
         if side == "long":

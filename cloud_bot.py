@@ -36,6 +36,7 @@ def _tif(symbol):
 def smart_buy(symbol, notional, ref_price):
     tif = _tif(symbol)
     steps = brain.best_limit_pct(symbol, "buy")
+    tried_ids = []
     for lim_pct in steps:
         limit_price = round(ref_price * lim_pct, 2)
         qty = round(float(notional) / max(limit_price, 1e-9), 4)
@@ -52,7 +53,23 @@ def smart_buy(symbol, notional, ref_price):
                 fill = float(o.filled_avg_price)
                 return o.id, "filled", fill
             elif st in ("accepted", "new", "pending_new"):
-                return o.id, "queued", None
+                # Give the band one more short window to fill before we
+                # abandon it. Choppy markets let the price come back to us.
+                time.sleep(8)
+                o = client.get_order(o.id)
+                st = str(o.status)
+                if st in ("filled",):
+                    fill = float(o.filled_avg_price)
+                    return o.id, "filled", fill
+                # Still open: cancel and let the escalation below wind up.
+                tried_ids.append(o.id)
+                brain.log_execution(symbol, "buy", lim_pct,
+                                    (time.time() - _RUN_T0) if "_RUN_T0" in globals() else 0,
+                                    "timeout")
+                try:
+                    client.cancel_order_by_id(o.id)
+                except Exception:
+                    pass
             else:
                 try:
                     client.cancel_order_by_id(o.id)
@@ -61,10 +78,17 @@ def smart_buy(symbol, notional, ref_price):
         except Exception as e:
             print(f"    buy failed: {e}")
             continue
+    # Escalation: the market ran past our limits. Take the fill at market
+    # rather than miss the entry entirely (the bot is here to trade, not to
+    # save 10 bps). Big limit windows that stayed unfilled are cancelled
+    # above, so this is a single market order, not a duplicate.
     try:
+        qty = round(float(notional) / max(ref_price, 1e-9), 4)
+        if qty <= 0:
+            return None, "rejected", None
         o = client.submit_order(MarketOrderRequest(
             symbol=symbol, side=OrderSide.BUY, time_in_force=tif,
-            qty=round(float(notional) / max(ref_price, 1e-9), 4)))
+            qty=qty))
         time.sleep(5)
         o = client.get_order(o.id)
         return o.id, str(o.status), float(o.filled_avg_price) if o.filled_avg_price else None
@@ -190,6 +214,20 @@ def run_cloud():
                     print(f"  {p.symbol} profit-lock hit but market closed — next open run")
                     continue
                 _close_and_learn(p, "PROFIT-LOCK", cur)
+                continue
+            # 2b) adaptive trailing stop on winners (ATR-scaled, uses the
+            #     brain's trailing_profit_targets ladder). This locks in gains
+            #     faster than profit-lock when the trade has run up a lot,
+            #     without waiting for the fixed give-back.
+            trail_stop, trail_target = brain.trailing_profit_targets(
+                entry, cur, side="long",
+                atr=brain.avg_atr(all_data.get(internal, pd.DataFrame())))
+            if trail_stop is not None and cur <= trail_stop:
+                if internal not in brain.CRYPTO and not market_open:
+                    print(f"  {p.symbol} TRAIL-HIT but market closed — next open run")
+                    continue
+                _close_and_learn(p, "TRAIL-HIT", cur)
+                continue
             # 3) AI-driven exit: if the night-runner AI flagged the news
             #    BEARISH and we are holding a PROFIT, close early to lock it
             #    in before the bad news drags the price down — instead of
