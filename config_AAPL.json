@@ -1,17 +1,20 @@
 {
-  "mode": "momentum",
-  "label": "Momentum 6m",
+  "mode": "atr_breakout",
+  "entry": 20,
+  "exit": 10,
+  "mult": 0.5,
+  "label": "ATRbrk 20d x0.5",
   "symbol": "AAPL",
-  "regime": "QUIET_RANGE",
-  "test_score": 2.465984,
-  "hold_test_score": -99.0,
-  "updated": "2026-08-28T14:16:51",
+  "regime": "BULL_TREND",
+  "test_score": 2.850216,
+  "hold_test_score": 2.735,
   "adaptive": {
-    "rsi_buy": 20,
-    "rsi_sell": 55,
-    "ema_fast": 7,
-    "ema_slow": 18,
-    "atr_mult": 0.75,
-    "note": "low-vol: tighter thresholds"
-  }
+    "rsi_buy": 24,
+    "rsi_sell": 60,
+    "ema_fast": 9,
+    "ema_slow": 21,
+    "atr_mult": 1.0,
+    "note": "normal-vol: standard"
+  },
+  "updated": "2026-08-31T00:30:15"
 }

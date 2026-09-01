@@ -94,6 +94,19 @@ def run_cloud():
         except Exception:
             pass
 
+    # SELF-IMPROVEMENT: re-select the best strategy for any market whose
+    # config is stale (>1 day old). This is the bot "thinking" — it re-runs
+    # its backtests on the latest data and keeps only what beats buy-and-hold
+    # in the current regime. Only stale symbols run, so this stays light, and
+    # each symbol re-evolves roughly once a day.
+    try:
+        stale = [s for s in brain.ALL if brain.config_is_stale(brain.load_config(s))]
+        if stale:
+            print(f"[SELF-LEARN] re-evolving {len(stale)} stale markets: {stale}")
+            brain.evolve_all(stale, force_print=False)
+    except Exception as e:
+        print(f"[SELF-LEARN] skipped ({e})")
+
     try:
         import news as news_mod
     except Exception:

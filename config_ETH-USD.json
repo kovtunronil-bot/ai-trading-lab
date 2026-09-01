@@ -7,14 +7,14 @@
   "symbol": "ETH/USD",
   "regime": "HIGH_VOL",
   "test_score": 83.626976,
-  "hold_test_score": -1.885,
+  "hold_test_score": -1.756,
   "adaptive": {
-    "rsi_buy": 10,
+    "rsi_buy": 24,
     "rsi_sell": 60,
     "ema_fast": 9,
     "ema_slow": 21,
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-08-26T20:07:06"
+  "updated": "2026-08-31T00:30:19"
 }

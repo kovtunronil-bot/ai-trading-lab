@@ -4,16 +4,16 @@
   "symbol": "TSLA",
   "regime": "BEAR_TREND",
   "test_score": 52.42,
-  "hold_test_score": -3.02,
+  "hold_test_score": -2.772,
   "adaptive": {
-    "rsi_buy": 8,
+    "rsi_buy": 20,
     "rsi_sell": 55,
     "ema_fast": 7,
     "ema_slow": 18,
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-08-26T20:04:58",
+  "updated": "2026-08-31T00:30:16",
   "period": 14,
   "buy_below": 25,
   "sell_above": 55

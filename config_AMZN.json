@@ -2,16 +2,16 @@
   "mode": "momentum",
   "label": "Momentum 6m",
   "symbol": "AMZN",
-  "regime": "QUIET_RANGE",
+  "regime": "BULL_TREND",
   "test_score": 2.729088,
-  "hold_test_score": -99.0,
-  "updated": "2026-08-28T14:16:51",
+  "hold_test_score": 1.755,
+  "updated": "2026-08-31T00:30:18",
   "adaptive": {
-    "rsi_buy": 20,
-    "rsi_sell": 55,
-    "ema_fast": 7,
-    "ema_slow": 18,
-    "atr_mult": 0.75,
-    "note": "low-vol: tighter thresholds"
+    "rsi_buy": 24,
+    "rsi_sell": 60,
+    "ema_fast": 9,
+    "ema_slow": 21,
+    "atr_mult": 1.0,
+    "note": "normal-vol: standard"
   }
 }

@@ -7,14 +7,14 @@
   "symbol": "GOOGL",
   "regime": "QUIET_RANGE",
   "test_score": 829.236384,
-  "hold_test_score": 4.877,
+  "hold_test_score": -1.479,
   "adaptive": {
-    "rsi_buy": 10,
+    "rsi_buy": 24,
     "rsi_sell": 60,
     "ema_fast": 9,
     "ema_slow": 21,
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-08-26T20:33:27"
+  "updated": "2026-08-31T00:30:18"
 }

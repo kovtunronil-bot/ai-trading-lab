@@ -6,14 +6,14 @@
   "symbol": "MSFT",
   "regime": "BULL_TREND",
   "test_score": 2.2866720000000003,
-  "hold_test_score": 1.687,
+  "hold_test_score": -99.0,
   "adaptive": {
-    "rsi_buy": 15,
-    "rsi_sell": 65,
-    "ema_fast": 12,
-    "ema_slow": 26,
-    "atr_mult": 1.5,
-    "note": "high-vol: wider thresholds"
+    "rsi_buy": 24,
+    "rsi_sell": 60,
+    "ema_fast": 9,
+    "ema_slow": 21,
+    "atr_mult": 1.0,
+    "note": "normal-vol: standard"
   },
-  "updated": "2026-08-26T20:36:49"
+  "updated": "2026-08-31T00:30:16"
 }

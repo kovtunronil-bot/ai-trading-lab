@@ -5,14 +5,14 @@
   "symbol": "NFLX",
   "regime": "BEAR_TREND",
   "test_score": 4.037368,
-  "hold_test_score": -4.041,
+  "hold_test_score": -4.027,
   "adaptive": {
-    "rsi_buy": 10,
+    "rsi_buy": 24,
     "rsi_sell": 60,
     "ema_fast": 9,
     "ema_slow": 21,
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-08-26T20:06:24"
+  "updated": "2026-08-31T00:30:19"
 }

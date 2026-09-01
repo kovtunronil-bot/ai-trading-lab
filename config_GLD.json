@@ -5,16 +5,16 @@
   "mult": 1.0,
   "label": "ATRbrk 55d x1.0",
   "symbol": "GLD",
-  "regime": "BULL_TREND",
-  "test_score": 8.290088,
-  "hold_test_score": 4.159,
+  "regime": "QUIET_RANGE",
+  "test_score": 11.770272000000002,
+  "hold_test_score": -3.928,
   "adaptive": {
-    "rsi_buy": 10,
+    "rsi_buy": 24,
     "rsi_sell": 60,
     "ema_fast": 9,
     "ema_slow": 21,
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-08-26T20:04:59"
+  "updated": "2026-08-31T00:30:17"
 }
