@@ -800,14 +800,30 @@ def strategy_quality(symbol):
 def strategy_is_failing(symbol):
     """True when the held symbol's current strategy has proven losing odds.
 
-    Either graded D/F outright, or a win-rate below FAILING_WR with enough
-    sampled trades to be meaningful."""
-    grade, wr, n = strategy_quality(symbol)
-    if grade in ("D", "F"):
-        return True
-    if wr is not None and n >= FAILING_MIN_TRADES and wr < FAILING_WR:
-        return True
-    return False
+    Judged by EXPECTED VALUE (avg_pnl), not raw win-rate: a trend strategy
+    can win only 35% of trades yet still be strongly profitable because its
+    winners are much bigger than its losers (MSFT EMA9/21: wr 0.32, avg
+    +1.4%). Blocking on win-rate alone would kill those. We only label a
+    strategy failing once it has a *negative* average P&L with enough trades
+    to be meaningful, or a clear D/F (negative EV) grade."""
+    try:
+        cfg = load_config(symbol)
+        if not cfg:
+            return False
+        perf = strategy_performance(symbol)
+        cur_label = cfg.get("label", "")
+        info = (perf or {}).get(cur_label)
+        if not info:
+            return False
+        # D/F means negative EV. C means positive but modest. A/B positive.
+        if info["grade"] in ("D", "F"):
+            return True
+        # Negative average P&L with enough samples = a proven loser.
+        if info["avg_pnl"] < 0 and info["n"] >= FAILING_MIN_TRADES:
+            return True
+        return False
+    except Exception:
+        return False
 
 
 def auto_adjust_strategy(symbol):

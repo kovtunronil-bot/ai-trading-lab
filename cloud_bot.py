@@ -360,7 +360,10 @@ def run_cloud():
         action, detail = "WAIT", ""
         try:
             if want_in and holding is None and allow_entries:
-                if recent_mom < -0.03:
+                if brain.strategy_is_failing(symbol):
+                    action, detail = "FAILING-STRATEGY-BLOCKED", "trained loser — skip entry"
+                    print(f"  {symbol}: blocked — strategy {cfg.get('label')} has proven losing odds")
+                elif recent_mom < -0.03:
                     action, detail = "MOMENTUM-BLOCKED", f"price dropped {recent_mom*100:+.1f}%"
                 elif symbol in pending_symbols:
                     action, detail = "PENDING", "order working"
