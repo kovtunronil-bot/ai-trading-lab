@@ -285,6 +285,43 @@ def run_cloud():
 
     print(f"Equity: ${equity:,.2f} | Drawdown: {drawdown*100:+.1f}% | Positions: {len(positions)} | Cash: ${float(account.cash):,.2f}")
 
+    # CONCENTRATION TRIM: a position that has grown past its intended cap
+    # (vol-target cap, or price appreciation) is trimmed back to the cap so
+    # no single bet can swamp the portfolio. Stocks use the vol cap; crypto
+    # respects the 1.8x boost cap.
+    #   - over cap x 1.25: trim no matter what (hard risk discipline; a
+    #     lopsided losing bet is the MOST dangerous kind)
+    #   - over cap x 1.1 but under 1.25: trim winners only (never lock a loss
+    #     on a mild overage)
+    try:
+        for p in list(positions):
+            internal = brain.internal_sym(p.symbol)
+            entry = float(p.avg_entry_price)
+            cur = float(p.current_price)
+            mv = float(p.market_value)
+            if entry <= 0 or cur <= 0:
+                continue
+            cap_sym = 27000.0 if internal in brain.CRYPTO else 15000.0
+            if mv <= cap_sym * 1.1:
+                continue
+            hard_trim = mv > cap_sym * 1.25
+            if not hard_trim and cur <= entry:  # mild overage on a loser: wait
+                continue
+            sell_mv = mv - cap_sym
+            qty = sell_mv / cur
+            if qty <= 0:
+                continue
+            oid, st, fill_price = smart_sell(p.symbol, qty, cur)
+            if st == "filled" and fill_price:
+                reason = "HARD-TRIM" if hard_trim else "TRIM"
+                brain.log_journal(internal, cur, reason, f"{p.symbol} trim ${sell_mv:,.0f} back to cap", equity)
+                brain.send_alert(f"{reason} {p.symbol}: oversized ${mv:,.0f} -> trimmed ${sell_mv:,.0f}")
+                print(f"  {reason} {p.symbol}: trimmed ${sell_mv:,.0f} (${mv:,.0f} -> cap)")
+            else:
+                print(f"  TRIM {p.symbol}: sell {st or 'err'}, will retry")
+    except Exception as e:
+        print(f"  trim pass failed: {e}")
+
     actions = {}
     for symbol in brain.ALL:
         cfg = brain.load_config(symbol)
