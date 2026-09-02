@@ -438,6 +438,36 @@ def run_cloud():
     except Exception as e:
         print(f"  trim pass failed: {e}")
 
+    # CORRELATION DE-RISK: live multi-asset risk management. If several held
+    # positions start moving in lockstep (e.g. a sector-wide selloff), they are
+    # really one single bet, not several diverse bets. Detect a correlated
+    # cluster of 3+ holdings all moving together and trim the redundant names
+    # (keeping the strongest-mover) so one macro shock can't drag the whole
+    # book. This is the "dynamic correlation matrix" risk guard.
+    try:
+        held_internal = [brain.internal_sym(p.symbol) for p in positions]
+        corr_trims = brain.correlation_de_risk(closes, held_internal)
+        for sym, frac in corr_trims:
+            p = next((p for p in positions if brain.internal_sym(p.symbol) == sym), None)
+            if not p:
+                continue
+            cur = float(p.current_price)
+            if cur <= 0:
+                continue
+            qty = round(float(p.qty) * frac, 4)
+            if qty <= 0:
+                continue
+            mv = float(p.market_value)
+            oid, st, fill_price = smart_sell(p.symbol, qty, cur)
+            if st == "filled" and fill_price:
+                reason = "CORR-TRIM"
+                brain.log_journal(sym, cur, reason,
+                                  f"{p.symbol} trim {frac*100:.0f}% correlated bet (${mv:,.0f})", equity)
+                brain.send_alert(f"{reason} {p.symbol}: trimming redundant correlated position")
+                print(f"  CORR-TRIM {p.symbol}: trimmed {frac*100:.0f}% for correlation de-risk")
+    except Exception as e:
+        print(f"  correlation de-risk failed: {e}")
+
     actions = {}
     for symbol in brain.ALL:
         cfg = brain.load_config(symbol)

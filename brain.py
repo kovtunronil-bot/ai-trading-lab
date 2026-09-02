@@ -361,6 +361,85 @@ def dynamic_heat_cap(regime, drawdown=0.0):
     return round(cap, 2)
 
 
+def correlation_de_risk(closes, held_symbols, corr_threshold=0.85, min_group=3, trim_fraction=0.30):
+    """Live multi-asset de-risking based on a dynamic correlation matrix.
+
+    If several held positions are moving in lockstep (high pairwise correlation),
+    they are effectively ONE risk bet, not several. When a correlated cluster of
+    3+ positions all share the current move direction, we trim the most-correlated
+    names so a single macro shock can't drag the whole book together.
+
+    Returns list of (symbol, sell_mv) to trim, or [] if holdings are diversified.
+    """
+    try:
+        import itertools
+        rets = {}
+        for sym, ser in closes.items():
+            if ser is None or len(ser) < 2:
+                continue
+            r = ser.pct_change().dropna()
+            rets[sym] = r.iloc[-60:]   # recent ~quarter window
+        held = [s for s in held_symbols if s in rets and len(rets[s]) > 5]
+        if len(held) < min_group:
+            return []
+
+        # centroid = average recent return of the whole held book
+        all_rets = []
+        for s in held:
+            all_rets.append(rets[s])
+        import pandas as pd
+        frame = pd.concat({s: rets[s] for s in held}, axis=1, join="inner")
+        if frame.shape[0] < 10 or frame.shape[1] < 2:
+            return []
+        corr = frame.corr()
+        sym_mean = frame.mean(axis=0)   # per-symbol average daily return (index=symbol)
+
+        # build clusters: for each pair that is highly correlated, union-find
+        parent = {s: s for s in held}
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[rb] = ra
+        for a, b in itertools.combinations(held, 2):
+            if corr.loc[a, b] >= corr_threshold:
+                union(a, b)
+        clusters = {}
+        for s in held:
+            clusters.setdefault(find(s), []).append(s)
+
+        # a cluster is only a single-risk bet if ALL members point the same way.
+        # Take the signed mean of the cluster's per-symbol returns; if they agree
+        # strongly (|avg| >= 0.005), it's a true correlated move worth trimming.
+        clusters = [c for c in clusters.values() if len(c) >= min_group]
+        if not clusters:
+            return []
+        def cluster_mag(c):
+            vals = [sym_mean[s] for s in c if s in sym_mean.index]
+            if not vals:
+                return 0.0
+            return abs(sum(vals) / len(vals))
+        best = max(clusters, key=cluster_mag)
+        if cluster_mag(best) < 0.005:
+            return []   # no strong shared move — not a real single-risk event
+
+        # Keep the single strongest-mover of the cluster and trim the rest, so
+        # we diversify away the redundant copies of the same bet while keeping
+        # our highest-conviction name of that group.
+        keep = max(best, key=lambda s: abs(sym_mean[s]) if s in sym_mean.index else 0)
+        trims = []
+        for s in best:
+            if s != keep:
+                trims.append((s, trim_fraction))
+        return trims
+    except Exception:
+        return []
+
+
 def avoid_entry_window(symbol):
     if symbol in CRYPTO:
         return False, ""
