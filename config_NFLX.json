@@ -6,7 +6,7 @@
   "label": "ATRbrk 20d x0.5",
   "symbol": "NFLX",
   "regime": "QUIET_RANGE",
-  "test_score": 14.168032000000002,
+  "test_score": 22.380456000000002,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 24,
@@ -16,5 +16,5 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-01T12:29:09"
+  "updated": "2026-09-02T14:08:00"
 }

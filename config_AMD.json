@@ -1,12 +1,12 @@
 {
-  "mode": "momentum",
-  "label": "Momentum 6m",
+  "mode": "ema_cross",
+  "fast": 12,
+  "slow": 26,
+  "label": "EMA12/26",
   "symbol": "AMD",
   "regime": "QUIET_RANGE",
-  "test_score": 5.424224,
-  "hold_test_score": 10.824,
-  "ai_proposed": true,
-  "updated": "2026-09-01T12:29:06",
+  "test_score": 5.7467999999999995,
+  "hold_test_score": 10.054,
   "adaptive": {
     "rsi_buy": 24,
     "rsi_sell": 60,
@@ -14,5 +14,6 @@
     "ema_slow": 21,
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
-  }
+  },
+  "updated": "2026-09-02T14:07:53"
 }

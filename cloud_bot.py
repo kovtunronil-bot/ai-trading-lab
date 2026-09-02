@@ -195,6 +195,18 @@ def run_cloud():
         cur = float(p.current_price)
         if entry <= 0:
             continue
+        pnl_pct = cur / entry - 1
+
+        # EMERGENCY PROTECTION: hard exit. If a single position is down >12%
+        # from entry, close it immediately regardless of other conditions.
+        # This is the backstop for gap-throughs, flash crashes, or any
+        # situation where the normal stop-loss (8%) didn't trigger in time.
+        if pnl_pct < -0.12:
+            if internal not in brain.CRYPTO and not market_open:
+                print(f"  {p.symbol} HARD-EXIT ({pnl_pct*100:+.1f}%) but market closed — next open run")
+                continue
+            _close_and_learn(p, f"HARD-EXIT({pnl_pct*100:+.1f}%)", cur)
+            continue
         # Adaptive safety exit: a held symbol on a statistically failing
         # strategy gets a tighter stop so we don't ride losers via its weak
         # sell logic (e.g. MSFT EMA9/21 at 32% win-rate).
@@ -263,7 +275,45 @@ def run_cloud():
         state["halted"] = True
         state["lockdown"] = True
 
-    allow_entries = breaker_level != "CAUTION"
+    allow_entries = breaker_level not in ("CAUTION", "HALT", "LOCKDOWN")
+
+    # EMERGENCY PROTECTION: daily loss limit. If equity dropped >3% from the
+    # previous day's close, stop all new entries for today. This prevents
+    # compounding losses during a multi-day selloff (e.g. tariff shock, flash
+    # crash + aftershocks). Checked by comparing current equity to yesterday's
+    # last recorded equity in equity_history.
+    try:
+        yesterday_eq = brain.latest_equity_before(datetime.now().date(), days_back=2)
+        if yesterday_eq and yesterday_eq > 0:
+            daily_loss = equity / yesterday_eq - 1
+            if daily_loss < -0.03:
+                allow_entries = False
+                print(f">>> DAILY LOSS LIMIT: {daily_loss*100:+.1f}% from yesterday — entries halted for today")
+    except Exception:
+        pass
+
+    # EMERGENCY PROTECTION: HALT-level trim. At -10% drawdown, forcibly
+    # trim the 2 largest positions by 30% each to reduce risk while still
+    # keeping some exposure (not a full liquidation like LOCKDOWN).
+    if breaker_level == "HALT":
+        try:
+            sized = sorted(positions, key=lambda p: float(p.market_value), reverse=True)
+            for p in sized[:2]:
+                mv = float(p.market_value)
+                cur = float(p.current_price)
+                if cur <= 0:
+                    continue
+                trim_qty = round(p.qty * 0.30, 4)
+                if trim_qty <= 0:
+                    continue
+                oid, st, fill_price = smart_sell(p.symbol, trim_qty, cur)
+                if st == "filled" and fill_price:
+                    brain.log_journal(brain.internal_sym(p.symbol), cur, "HALT-TRIM",
+                                      f"-30% {p.symbol} (${mv:,.0f})", equity)
+                    brain.send_alert(f"HALT-TRIM {p.symbol}: trimming 30% at -10% drawdown")
+                    print(f"  HALT-TRIM {p.symbol}: sold 30% ({trim_qty} shares)")
+        except Exception as e:
+            print(f"  halt-trim error: {e}")
 
     try:
         all_open_orders = list(client.get_orders())

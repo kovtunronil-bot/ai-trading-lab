@@ -1,12 +1,11 @@
 {
-  "mode": "atr_breakout",
+  "mode": "donchian",
   "entry": 20,
   "exit": 10,
-  "mult": 0.5,
-  "label": "ATRbrk 20d x0.5",
+  "label": "Donchian 20/10",
   "symbol": "AAPL",
   "regime": "QUIET_RANGE",
-  "test_score": 2.850216,
+  "test_score": 2.944272,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,
@@ -16,5 +15,5 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-01T12:29:09"
+  "updated": "2026-09-02T14:07:59"
 }

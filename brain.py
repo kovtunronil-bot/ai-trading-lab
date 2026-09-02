@@ -1137,6 +1137,21 @@ def incident_stats(days=7):
         return []
 
 
+def latest_equity_before(target_date, days_back=2):
+    """Return the most recent equity recorded before target_date, looking back
+    up to days_back days. Used by the daily loss limit to compare today's
+    equity to yesterday's close."""
+    try:
+        conn = init_db()
+        row = conn.execute(
+            "SELECT equity FROM equity_history WHERE date < ? ORDER BY date DESC LIMIT 1",
+            (target_date.isoformat(),)).fetchone()
+        conn.close()
+        return float(row[0]) if row else None
+    except Exception:
+        return None
+
+
 def readiness_score():
     conn = init_db()
     checks = []
