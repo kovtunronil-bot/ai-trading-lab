@@ -1079,7 +1079,7 @@ def avg_atr(df):
         return None
 
 
-def trailing_profit_targets(entry_price, current_price, side="long", atr=None):
+def trailing_profit_targets(entry_price, current_price, side="long", atr=None, regime=None):
     try:
         if side == "long":
             gain = current_price / entry_price - 1
@@ -1087,7 +1087,18 @@ def trailing_profit_targets(entry_price, current_price, side="long", atr=None):
             gain = 1 - current_price / entry_price
         if atr is None or atr <= 0:
             atr = entry_price * 0.015
+        # Market-regime awareness: let winners run in a strong trend (wider
+        # trail), take profits faster in a range, and protect early profits in
+        # high volatility. Default = fixed multiplier kept for compatibility.
         atr_stop_dist = atr * 2.0
+        if regime == "BULL_TREND" or regime == "BEAR_TREND":
+            atr_stop_dist = atr * 2.6      # ride the trend, wider room
+        elif regime == "HIGH_VOL":
+            atr_stop_dist = atr * 3.0      # wider in noise, avoid shake-outs
+        elif regime in ("QUIET_RANGE", "BULL_RANGE", "BEAR_RANGE"):
+            atr_stop_dist = atr * 1.4      # tight range, lock gains faster
+        elif regime == "UNKNOWN":
+            atr_stop_dist = atr * 2.0
         if gain < 0.01:
             return None, None
         elif gain < 0.03:
@@ -1229,10 +1240,18 @@ def clear_position_peak(symbol):
     conn.close()
 
 
-def profit_lock_hit(entry, current, peak):
+def profit_lock_hit(entry, current, peak, regime=None, giveback=None):
     if entry <= 0 or peak <= 0:
         return False
-    return current >= entry * (1 + TRAIL_ACTIVATE) and current <= peak * (1 - TRAIL_GIVEBACK)
+    if giveback is None:
+        giveback = TRAIL_GIVEBACK
+    if regime == "BULL_TREND" or regime == "BEAR_TREND":
+        giveback = max(giveback, 0.08)   # hold winners longer in a trend
+    elif regime == "HIGH_VOL":
+        giveback = min(giveback, 0.04)   # protect gains fast in choppy vol
+    elif regime in ("QUIET_RANGE", "BULL_RANGE", "BEAR_RANGE"):
+        giveback = min(giveback, 0.03)   # tight range: lock profits quickly
+    return current >= entry * (1 + TRAIL_ACTIVATE) and current <= peak * (1 - giveback)
     c.execute("SELECT COUNT(*) FROM journal")
     if c.fetchone()[0] == 0:
         try:

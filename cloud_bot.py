@@ -221,19 +221,23 @@ def run_cloud():
         else:
             # 2) profit-lock / trailing stop on winners
             pos_peak = brain.update_position_peak(internal, cur, entry)
-            if brain.profit_lock_hit(entry, cur, pos_peak):
+            _live_reg = brain.current_regime(all_data.get(internal, pd.DataFrame()))
+            if brain.profit_lock_hit(entry, cur, pos_peak, regime=_live_reg):
                 if internal not in brain.CRYPTO and not market_open:
                     print(f"  {p.symbol} profit-lock hit but market closed — next open run")
                     continue
                 _close_and_learn(p, "PROFIT-LOCK", cur)
                 continue
-            # 2b) adaptive trailing stop on winners (ATR-scaled, uses the
-            #     brain's trailing_profit_targets ladder). This locks in gains
-            #     faster than profit-lock when the trade has run up a lot,
-            #     without waiting for the fixed give-back.
+            # 2b) adaptive trailing stop on winners (ATR-scaled, regime-aware,
+            #     uses brain's trailing_profit_targets ladder). Locks in gains
+            #     faster than profit-lock once the trade has run up a lot, and
+            #     adapts stop width to the market regime (wider in trends, tighter
+            #     in ranges) so we ride winners in trending markets and bank
+            #     profits quickly in choppy/ranging ones.
             trail_stop, trail_target = brain.trailing_profit_targets(
                 entry, cur, side="long",
-                atr=brain.avg_atr(all_data.get(internal, pd.DataFrame())))
+                atr=brain.avg_atr(all_data.get(internal, pd.DataFrame())),
+                regime=_live_reg)
             if trail_stop is not None and cur <= trail_stop:
                 if internal not in brain.CRYPTO and not market_open:
                     print(f"  {p.symbol} TRAIL-HIT but market closed — next open run")
