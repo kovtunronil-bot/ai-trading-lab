@@ -6,14 +6,14 @@
   "test_score": 15.87,
   "hold_test_score": -99.0,
   "adaptive": {
-    "rsi_buy": 24,
-    "rsi_sell": 60,
-    "ema_fast": 9,
-    "ema_slow": 21,
-    "atr_mult": 1.0,
-    "note": "normal-vol: standard"
+    "rsi_buy": 20,
+    "rsi_sell": 55,
+    "ema_fast": 7,
+    "ema_slow": 18,
+    "atr_mult": 0.75,
+    "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-01T15:26:42",
+  "updated": "2026-09-02T16:32:46",
   "period": 4,
   "buy_below": 20,
   "sell_above": 60
