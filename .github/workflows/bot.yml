@@ -30,6 +30,7 @@ jobs:
       env:
         APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
         APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+        NTFY_TV_TOPIC: robot-mx7-bluefalcon-tv
       run: python cloud_bot.py
 
     - name: Commit DB changes

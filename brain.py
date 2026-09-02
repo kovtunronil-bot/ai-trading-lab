@@ -2178,6 +2178,64 @@ def send_alert(message):
         pass
 
 
+def check_tradingview_signals():
+    """Poll the dedicated TradingView ntfy topic for recent signals.
+
+    Expected TradingView alert format (one per message):
+        SIGNAL:BUY:<SYMBOL>:<reason>
+        SIGNAL:SELL:<SYMBOL>:<reason>
+
+    Returns a list of dicts: [{"action": "buy"|"sell", "symbol": "...", "reason": "..."}]
+    Only messages from the last 2 hours are considered (to avoid stale signals).
+    """
+    import os, time as _t
+    topic = os.environ.get("NTFY_TV_TOPIC", "")
+    if not topic:
+        try:
+            from keys import NTFY_TV_TOPIC
+            topic = NTFY_TV_TOPIC
+        except Exception:
+            pass
+    if not topic:
+        return []
+    try:
+        import requests
+        r = requests.get(f"https://ntfy.sh/{topic}/json", timeout=10)
+        if r.status_code != 200:
+            return []
+        signals = []
+        cutoff = _t.time() - 7200  # 2 hours
+        for line in r.text.strip().split("\n"):
+            if not line.strip():
+                continue
+            try:
+                import json
+                msg = json.loads(line)
+            except Exception:
+                continue
+            if msg.get("time", 0) < cutoff:
+                continue
+            body = msg.get("message", "").strip()
+            if not body.upper().startswith("SIGNAL:"):
+                continue
+            parts = body.split(":", 3)
+            if len(parts) < 3:
+                continue
+            action = parts[1].upper()
+            symbol = parts[2].upper()
+            reason = parts[3] if len(parts) > 3 else "TradingView signal"
+            if action in ("BUY", "SELL"):
+                # Normalize symbol: TV might send "AAPL" or "BINANCE:BTCUSDT"
+                symbol = symbol.replace("BINANCE:", "").replace("NASDAQ:", "").replace("NYSE:", "")
+                if "/" not in symbol and len(symbol) > 2 and symbol.endswith("USD"):
+                    # Crypto like BTCUSD -> BTC/USD
+                    symbol = symbol[:-3] + "/" + symbol[-3:]
+                signals.append({"action": action.lower(), "symbol": symbol, "reason": reason})
+        return signals
+    except Exception:
+        return []
+
+
 def _valid_proposal(p):
     if not isinstance(p, dict):
         return False

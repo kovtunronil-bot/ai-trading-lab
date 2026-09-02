@@ -315,6 +315,68 @@ def run_cloud():
         except Exception as e:
             print(f"  halt-trim error: {e}")
 
+    # ── TradingView signal execution ──────────────────────────────────────
+    # Check the dedicated ntfy topic for TradingView alerts. These are
+    # executed BEFORE the bot's own logic so they act as an overlay — the
+    # bot still does its normal analysis, but TradingView signals get
+    # priority execution. Only fires when entries are allowed (no
+    # CAUTION/HALT/LOCKDOWN). Sell signals close existing positions
+    # immediately regardless of the normal exit logic.
+    try:
+        tv_signals = brain.check_tradingview_signals()
+        if tv_signals:
+            print(f"\n[TRADINGVIEW] {len(tv_signals)} signal(s) received:")
+            held_symbols = {brain.internal_sym(p.symbol) for p in positions}
+            for sig in tv_signals:
+                sym = sig["symbol"]
+                action = sig["action"]
+                reason = sig["reason"]
+                print(f"  TV {action.upper()} {sym}: {reason}")
+                if action == "buy" and allow_entries:
+                    # Check if already holding
+                    if sym in held_symbols or brain.alpaca_sym(sym) in [p.symbol for p in positions]:
+                        print(f"    -> already holding {sym}, skip")
+                        continue
+                    # Check if it's a known market symbol
+                    cfg = brain.load_config(sym)
+                    if not cfg and sym not in brain.ALL:
+                        print(f"    -> {sym} not in tracked markets, skip")
+                        continue
+                    # Execute buy via Alpaca
+                    notional = min(brain.vol_targeted_notional(vols, sym), 10000)
+                    if sym in brain.CRYPTO:
+                        notional *= 1.8
+                    df = all_data.get(sym, pd.DataFrame())
+                    price = float(df["Close"].iloc[-1]) if not df.empty else None
+                    if price and price > 0:
+                        oid, st, fill_price = smart_buy(sym, notional, price)
+                        if st == "filled" and fill_price:
+                            brain.set_position_strategy(sym, f"TradingView: {reason[:30]}")
+                            brain.log_journal(sym, fill_price, "TV-BUY",
+                                              f"{sym} ${notional:,.0f} reason: {reason[:60]}", equity)
+                            brain.send_alert(f"TradingView BUY {sym} ${notional:,.0f} ({reason})")
+                            print(f"    -> BOUGHT {sym} ${notional:,.0f} @ ${fill_price}")
+                        else:
+                            print(f"    -> buy {st or 'error'}")
+                elif action == "sell":
+                    # Close existing position if holding
+                    holding = next((p for p in positions if brain.internal_sym(p.symbol) == sym or p.symbol == sym), None)
+                    if holding:
+                        cur_price = float(holding.current_price)
+                        qty = holding.qty
+                        oid, st, fill_price = smart_sell(holding.symbol, qty, cur_price)
+                        if st == "filled" and fill_price:
+                            brain.log_journal(sym, fill_price, "TV-SELL",
+                                              f"closed {qty} x {sym} reason: {reason[:60]}", equity)
+                            brain.send_alert(f"TradingView SELL {sym} ({reason})")
+                            print(f"    -> SOLD {sym} @ ${fill_price}")
+                        else:
+                            print(f"    -> sell {st or 'error'}")
+                    else:
+                        print(f"    -> not holding {sym}, skip sell")
+    except Exception as e:
+        print(f"  TradingView signal error: {e}")
+
     try:
         all_open_orders = list(client.get_orders())
         pending_symbols = {brain.internal_sym(o.symbol) for o in all_open_orders}
