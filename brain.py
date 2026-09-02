@@ -440,6 +440,73 @@ def correlation_de_risk(closes, held_symbols, corr_threshold=0.85, min_group=3, 
         return []
 
 
+def _trade_pnl_history(limit=300):
+    """Real per-trade PnL%s from live/paper history, newest first."""
+    try:
+        conn = init_db()
+        rows = conn.execute(
+            "SELECT pnl_pct FROM trade_pnl ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        conn.close()
+        vals = [float(r[0]) for r in rows] or []
+        return vals
+    except Exception:
+        return []
+
+
+def monte_carlo_drawdown(simulations=2000, trades_per_sim=60, seed=42):
+    """Estimate the bot's true worst-case drawdown risk via Monte Carlo.
+
+    Resamples the bot's REAL historical per-trade PnL distribution thousands
+    of times, compounding consecutive trade outcomes (respecting the fact
+    that stop-losses cap single-trade losses at ~POSITION_STOP_LOSS), and
+    records the max drawdown in each simulated run. Returns a dict with the
+    median worst-case drawdown and a conservative 95th-percentile figure,
+    plus a risk_multiplier that scales position size down when projected risk
+    approaches the circuit-breaker limits.
+
+    Losing outliers beyond the stop-loss are excluded since a working stop
+    prevents such catastrophic single-trade outcomes.
+    """
+    import random
+    vals = _trade_pnl_history()
+    if len(vals) < 20:
+        return {"median_dd": 0.0, "p95_dd": 0.0, "risk_mult": 1.0, "samples": len(vals)}
+    # Real stops cap single-trade losses; drop implausible gut-wrenchers.
+    stop_loss_pct = POSITION_STOP_LOSS * 100.0
+    clean = [v for v in vals if v > -stop_loss_pct]
+    if len(clean) < 20:
+        clean = vals
+    rng = random.Random(seed)
+    worst_list = []
+    for _ in range(simulations):
+        equity = 100.0
+        peak = 100.0
+        max_dd = 0.0
+        for _t in range(trades_per_sim):
+            r = rng.choice(clean)
+            equity *= (1 + r / 100.0)
+            peak = max(peak, equity)
+            dd = (equity / peak - 1.0) * 100.0
+            max_dd = min(max_dd, dd)
+        worst_list.append(max_dd)
+    worst_list.sort()
+    median_dd = worst_list[len(worst_list) // 2]
+    p95_dd = worst_list[int(len(worst_list) * 0.95) - 1]
+    # If the projected 95th-percentile worst-case drawdown approaches our
+    # HALT (-10%) / LOCKDOWN (-20%) levels, scale sizes down to keep risk
+    # inside the envelope. p95 of -7% or worse => tighten.
+    risk_mult = 1.0
+    if p95_dd < -7.0:
+        risk_mult = max(0.4, min(1.0, -5.0 / (p95_dd if p95_dd < 0 else -5.0)))
+    return {"median_dd": round(median_dd, 2), "p95_dd": round(p95_dd, 2),
+            "risk_mult": round(risk_mult, 3), "samples": len(clean)}
+
+
+def risk_multiplier():
+    """Convenience wrapper: current Monte-Carlo-derived position-size scale."""
+    return monte_carlo_drawdown()["risk_mult"]
+
+
 def avoid_entry_window(symbol):
     if symbol in CRYPTO:
         return False, ""

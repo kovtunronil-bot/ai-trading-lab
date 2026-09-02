@@ -468,6 +468,23 @@ def run_cloud():
     except Exception as e:
         print(f"  correlation de-risk failed: {e}")
 
+    # MONTE CARLO RISK ADVISOR: resample our real trading history to project
+    # the most likely worst-case drawdown. If the projected 95th-percentile
+    # drawdown approaches our HALT/LOCKDOWN limits, this returns a scale
+    # factor (<1) applied to every new entry so the bot sizes down BEFORE a
+    # catastrophic drawdown, not after. Print the advisory each run for
+    # transparency.
+    try:
+        mc = brain.monte_carlo_drawdown()
+        risk_mult = mc["risk_mult"]
+        print(f">>> MONTE-CARLO: p95 worst-case DD {mc['p95_dd']}% (median {mc['median_dd']}%) "
+              f"-> sizing {risk_mult*100:.0f}%")
+        if risk_mult < 1.0:
+            brain.send_alert(f"MONTE-CARLO: projected p95 DD {mc['p95_dd']}% -> scaling entries to {risk_mult*100:.0f}%")
+    except Exception as e:
+        risk_mult = 1.0
+        print(f"  monte-carlo risk advisor skipped ({e})")
+
     actions = {}
     for symbol in brain.ALL:
         cfg = brain.load_config(symbol)
@@ -485,6 +502,7 @@ def run_cloud():
         want_in, buy_txt, sell_txt, notes = brain.current_state(df, cfg)
         holding = next((p for p in positions if brain.alpaca_sym(p.symbol) == brain.alpaca_sym(symbol)), None)
         planned_notional = brain.vol_targeted_notional(vols, symbol)
+        planned_notional *= risk_mult   # Monte-Carlo-derived risk sizing
         conviction = brain.conviction_score(symbol, cfg, regime=live_regime)
         recent_mom = brain.recent_momentum(df)
 
