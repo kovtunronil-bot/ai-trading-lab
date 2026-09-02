@@ -1619,6 +1619,59 @@ def _raw_position(df, cfg):
         s[(adx > cfg["threshold"]) & (pdi > mdi)] = 1
         s[pdi < mdi] = 0
 
+    elif mode == "parabolic":
+        # Parabolic SAR trend follower: in position when price stays above the
+        # SAR dots (uptrend), out when it flips below. Captures longer trends.
+        af = cfg.get("af", 0.02)
+        af_max = cfg.get("af_max", 0.2)
+        high, low = df["High"], df["Low"]
+        sar = [None] * len(close)
+        tr = [None] * len(close)
+        ep = [None] * len(close)
+        trend = int(cfg.get("trend", 1))
+        up = True
+        sar[0] = low.iloc[0]
+        ep[0] = high.iloc[0]
+        # simple; build iteratively
+        cur_sar = sar[0]
+        cur_ep = ep[0]
+        cur_af = af
+        cur_up = up
+        for i in range(1, len(close)):
+            prev_sar = cur_sar
+            prev_ep = cur_ep
+            prev_up = cur_up
+            if prev_up:
+                cur_sar = prev_sar + cur_af * (prev_ep - prev_sar)
+            else:
+                cur_sar = prev_sar + cur_af * (prev_ep - prev_sar)
+            cur_sar = min(cur_sar, low.iloc[i-1]) if prev_up else max(cur_sar, high.iloc[i-1])
+            if prev_up:
+                if low.iloc[i] < cur_sar:
+                    cur_up = False
+                    cur_sar = prev_ep
+                    cur_ep = low.iloc[i]
+                    cur_af = af
+                else:
+                    if high.iloc[i] > prev_ep:
+                        prev_ep = high.iloc[i]
+                        cur_af = min(af_max, cur_af + af)
+            else:
+                if high.iloc[i] > cur_sar:
+                    cur_up = True
+                    cur_sar = prev_ep
+                    cur_ep = high.iloc[i]
+                    cur_af = af
+                else:
+                    if low.iloc[i] < prev_ep:
+                        prev_ep = low.iloc[i]
+                        cur_af = min(af_max, cur_af + af)
+            sar[i] = cur_sar
+            ep[i] = cur_ep
+        sar_s = pd.Series(sar, index=close.index)
+        s[close > sar_s] = 1
+        s[close < sar_s] = 0
+
     if cfg.get("trend"):
         ok_trend = close > close.rolling(int(cfg["trend"])).mean()
         entries = s == 1
@@ -1693,6 +1746,12 @@ def candidates():
     for th in [20, 25]:
         cands.append({"mode": "adx", "threshold": th,
                       "label": f"ADX>{th} trend-on"})
+    cands.append({"mode": "parabolic", "af": 0.02, "af_max": 0.2,
+                  "label": "Parabolic SAR 0.02/0.20"})
+    cands.append({"mode": "parabolic", "af": 0.02, "af_max": 0.20, "trend": 100,
+                  "label": "Parabolic SAR +trend100"})
+    cands.append({"mode": "parabolic", "af": 0.05, "af_max": 0.30, "trend": 200,
+                  "vol_mult": 1.25, "label": "Parabolic SAR fast tr+vol"})
     cands.extend(load_ai_proposals())
     return cands
 
@@ -2141,6 +2200,36 @@ def is_exit_signal(df, cfg):
     if mode == "momentum":
         mom = float(close.pct_change(126).iloc[-1])
         return mom < 0
+
+    if mode == "parabolic":
+        # Exit when price closes back below the current SAR (trend flipped down)
+        # Recomputed with the same params the entry used.
+        af = cfg.get("af", 0.02)
+        af_max = cfg.get("af_max", 0.2)
+        high, low = df["High"], df["Low"]
+        cur_sar = low.iloc[0]
+        prev_ep = high.iloc[0]
+        cur_af = af
+        up = True
+        for i in range(1, len(close)):
+            prev_up = up
+            if prev_up:
+                cur_sar = cur_sar + cur_af * (prev_ep - cur_sar)
+                cur_sar = min(cur_sar, low.iloc[i-1])
+                if low.iloc[i] < cur_sar:
+                    up = False; cur_sar = prev_ep; prev_ep = low.iloc[i]; cur_af = af
+                else:
+                    if high.iloc[i] > prev_ep:
+                        prev_ep = high.iloc[i]; cur_af = min(af_max, cur_af + af)
+            else:
+                cur_sar = cur_sar + cur_af * (prev_ep - cur_sar)
+                cur_sar = max(cur_sar, high.iloc[i-1])
+                if high.iloc[i] > cur_sar:
+                    up = True; cur_sar = prev_ep; prev_ep = high.iloc[i]; cur_af = af
+                else:
+                    if low.iloc[i] < prev_ep:
+                        prev_ep = low.iloc[i]; cur_af = min(af_max, cur_af + af)
+        return float(close.iloc[-1]) < cur_sar and not up
 
     return False
 
