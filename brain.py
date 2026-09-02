@@ -2258,6 +2258,84 @@ def correlation_gate(closes, symbol, held_symbols, threshold=0.70, max_alike=2):
     return {"blocked": alike >= max_alike, "alike": alike, "avg": avg}
 
 
+def fundamental_gate(symbol, df=None, max_pe=200.0, min_market_cap=3e8):
+    """Fundamental analysis gate. Skips low-quality names.
+
+    Returns (blocked, detail). For crypto (no P/E), we can't judge
+    fundamentals, so we never block on them (blocked=False). For stocks we
+    use yfinance .info: block if the company is loss-making/unprofitable
+    (no meaningful earnings), priced at an absurd P/E, or a micro-cap de
+    facto (delisted/penny) risk. Uses caching to keep the cloud run fast.
+    """
+    if symbol in CRYPTO:
+        return False, ""
+    try:
+        info = _info_cached(symbol)
+        if not info:
+            return False, ""   # no data — don't block on opinion
+        trailing_pe = info.get("trailingPE") or info.get("forwardPE")
+        mc = info.get("marketCap")
+        # Block obviously unhealthy companies: loss-making or absurdly valued.
+        if trailing_pe is not None and (trailing_pe <= 0 or trailing_pe > max_pe):
+            return True, f"unhealthy: P/E {trailing_pe:.1f}"
+        if mc is not None and mc < min_market_cap:
+            return True, f"micro-cap ${mc/1e6:.0f}M"
+        return False, ""
+    except Exception:
+        return False, ""
+
+
+_info_cache = {}
+def _info_cached(symbol, ttl_s=3600):
+    import time as _t
+    now = _t.time()
+    if symbol in _info_cache:
+        ts, val = _info_cache[symbol]
+        if now - ts < ttl_s:
+            return val
+    try:
+        val = yf.Ticker(yf_symbol(symbol)).info
+        _info_cache[symbol] = (now, val)
+        return val
+    except Exception:
+        return {}
+
+
+def volume_confirm_gate(df, recent_n=5, lookback=20, min_ratio=0.6):
+    """Volume confirmation gate. Require the recent (last `recent_n` bars,
+    to smooth today's partial bar) average volume to not be abnormally dead
+    relative to the longer baseline. Blocks only clearly inactive/illiquid
+    participation. Returns (blocked, detail)."""
+    try:
+        if df is None or df.empty or "Volume" not in df:
+            return False, ""
+        v = float(df["Volume"].tail(recent_n).mean())
+        avg = float(df["Volume"].rolling(lookback).mean().iloc[-1])
+        if avg <= 0:
+            return False, ""
+        if v < min_ratio * avg:
+            return True, f"vol {v/avg:.2f}x < {min_ratio:.1f}x baseline"
+        return False, ""
+    except Exception:
+        return False, ""
+
+
+def liquidity_gate(symbol, df=None, min_dollar_vol=3e6):
+    """Liquidity check. Avoid trading thinly-traded names where our order
+    moves the price (bad fills / slippage). Uses average $ volume over the
+    recent week. Returns (blocked, detail)."""
+    try:
+        if df is None or df.empty or "Volume" not in df or "Close" not in df:
+            return False, ""
+        recent = df.tail(5)
+        avg_dollar = float((recent["Volume"] * recent["Close"]).mean())
+        if avg_dollar < min_dollar_vol:
+            return True, f"thin: ${avg_dollar/1e6:.1f}M < ${min_dollar_vol/1e6:.0f}M"
+        return False, ""
+    except Exception:
+        return False, ""
+
+
 def send_alert(message):
     import os
     topic = os.environ.get("NTFY_TOPIC", "")

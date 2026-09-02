@@ -511,52 +511,63 @@ def run_cloud():
                     print(f"  {symbol}: blocked — strategy {cfg.get('label')} has proven losing odds")
                 elif recent_mom < -0.03:
                     action, detail = "MOMENTUM-BLOCKED", f"price dropped {recent_mom*100:+.1f}%"
-                elif symbol in pending_symbols:
-                    action, detail = "PENDING", "order working"
                 else:
-                    size_mult = 1.0
-                    hc = brain.dynamic_heat_cap(live_regime, drawdown)
-                    if deployed + sized_notional > hc * equity:
-                        size_mult = min(size_mult, max(0.0, ((hc * equity) - deployed) / max(sized_notional, 1)))
-                        print(f">>> HEAT: sizing down {size_mult:.0%} to respect {hc*100:.0f}% cap ({live_regime})")
-                    if conviction < brain.FREE_SAIL_CONVICTION:
-                        if conviction < brain.MIN_CONVICTION:
-                            action, detail = "LOW-CONVICTION", f"{conviction:.0%} < {brain.MIN_CONVICTION:.0%}"
-                        else:
-                            size_mult = min(size_mult, 0.6)
-                            print(f">>> Conviction {conviction:.0%}: scaling down to 60%")
-                    if action == "WAIT" and brain.sector_blocked(positions, symbol, equity):
-                        room = brain.sector_room(positions, symbol, equity)
-                        size_mult = min(size_mult, max(0.2, room))
-                        print(f">>> SECTOR: sizing down to {room:.0%}")
-                    if action == "WAIT" and drawdown < -0.02 and conviction < 0.7:
-                        size_mult = min(size_mult, 0.55)
-                        print(f">>> DRAWDOWN-CONSERVATIVE: sizing down to 55%")
-                    if action == "WAIT":
-                        sized_notional = max(200, planned_notional * conviction * size_mult)
-                        # Pattern memory veto: skip if similar past setups lost money.
-                        try:
-                            pat = brain.hash_pattern(df, live_regime)
-                            hist = brain.check_pattern_memory(symbol, pat)
-                            if hist is not None and hist < -2:
-                                action, detail = "PATTERN-MEM", f"similar setups averaged {hist:+.1f}%"
-                            elif hist is not None:
-                                # Learned size boost: this exact pattern already
-                                # WON/WON-lost money in the past -> size accordingly.
-                                # (Boost confidence on winners, trim on mild losers.)
-                                if hist >= 2.0:
-                                    conviction = min(1.0, conviction + 0.12)
-                                    sized_notional = max(200, planned_notional * conviction * size_mult)
-                                    print(f">>> PATTERN-BOOST: pattern hist {hist:+.1f}% -> conviction {conviction:.0%}, ${sized_notional:,.0f}")
-                                elif hist >= 0.5:
-                                    conviction = min(1.0, conviction + 0.05)
-                                    sized_notional = max(200, planned_notional * conviction * size_mult)
-                                elif hist < 0:
-                                    conviction = max(0.0, conviction - 0.10)
-                                    sized_notional = max(200, planned_notional * conviction * size_mult)
-                                    print(f">>> PATTERN-TRIM: pattern hist {hist:+.1f}% -> conviction {conviction:.0%}, ${sized_notional:,.0f}")
-                        except Exception:
-                            pass
+                    # Entry-quality gates: fundamental health, volume, liquidity.
+                    f_blocked, f_detail = brain.fundamental_gate(symbol, df)
+                    v_blocked, _vd = brain.volume_confirm_gate(df)
+                    l_blocked, _ld = brain.liquidity_gate(symbol, df)
+                    if f_blocked:
+                        action, detail = "FUNDAMENTAL-BLOCKED", f_detail
+                    elif v_blocked:
+                        action, detail = "VOLUME-BLOCKED", "no volume confirmation"
+                    elif l_blocked:
+                        action, detail = "LIQUIDITY-BLOCKED", "insufficient liquidity"
+                    elif symbol in pending_symbols:
+                        action, detail = "PENDING", "order working"
+                    else:
+                        size_mult = 1.0
+                        hc = brain.dynamic_heat_cap(live_regime, drawdown)
+                        if deployed + sized_notional > hc * equity:
+                            size_mult = min(size_mult, max(0.0, ((hc * equity) - deployed) / max(sized_notional, 1)))
+                            print(f">>> HEAT: sizing down {size_mult:.0%} to respect {hc*100:.0f}% cap ({live_regime})")
+                        if conviction < brain.FREE_SAIL_CONVICTION:
+                            if conviction < brain.MIN_CONVICTION:
+                                action, detail = "LOW-CONVICTION", f"{conviction:.0%} < {brain.MIN_CONVICTION:.0%}"
+                            else:
+                                size_mult = min(size_mult, 0.6)
+                                print(f">>> Conviction {conviction:.0%}: scaling down to 60%")
+                        if action == "WAIT" and brain.sector_blocked(positions, symbol, equity):
+                            room = brain.sector_room(positions, symbol, equity)
+                            size_mult = min(size_mult, max(0.2, room))
+                            print(f">>> SECTOR: sizing down to {room:.0%}")
+                        if action == "WAIT" and drawdown < -0.02 and conviction < 0.7:
+                            size_mult = min(size_mult, 0.55)
+                            print(f">>> DRAWDOWN-CONSERVATIVE: sizing down to 55%")
+                        if action == "WAIT":
+                            sized_notional = max(200, planned_notional * conviction * size_mult)
+                            # Pattern memory veto: skip if similar past setups lost money.
+                            try:
+                                pat = brain.hash_pattern(df, live_regime)
+                                hist = brain.check_pattern_memory(symbol, pat)
+                                if hist is not None and hist < -2:
+                                    action, detail = "PATTERN-MEM", f"similar setups averaged {hist:+.1f}%"
+                                elif hist is not None:
+                                    # Learned size boost: this exact pattern already
+                                    # WON/WON-lost money in the past -> size accordingly.
+                                    # (Boost confidence on winners, trim on mild losers.)
+                                    if hist >= 2.0:
+                                        conviction = min(1.0, conviction + 0.12)
+                                        sized_notional = max(200, planned_notional * conviction * size_mult)
+                                        print(f">>> PATTERN-BOOST: pattern hist {hist:+.1f}% -> conviction {conviction:.0%}, ${sized_notional:,.0f}")
+                                    elif hist >= 0.5:
+                                        conviction = min(1.0, conviction + 0.05)
+                                        sized_notional = max(200, planned_notional * conviction * size_mult)
+                                    elif hist < 0:
+                                        conviction = max(0.0, conviction - 0.10)
+                                        sized_notional = max(200, planned_notional * conviction * size_mult)
+                                        print(f">>> PATTERN-TRIM: pattern hist {hist:+.1f}% -> conviction {conviction:.0%}, ${sized_notional:,.0f}")
+                            except Exception:
+                                pass
 
                     if action == "WAIT":
                         # Diversification: don't over-concentrate in correlated assets.
