@@ -1512,6 +1512,241 @@ def _atr14(df):
     return tr.rolling(14).mean()
 
 
+# ---------------------------------------------------------------------------
+# Shared technical-analysis helpers powering the expanded strategy set.
+# Each returns pandas objects aligned to df so they slot cleanly into the
+# _raw_position modes below. All are vectorised / iterative-safe on real data.
+# ---------------------------------------------------------------------------
+
+def _moon_phase_series(idx):
+    """Brick-size tilt from lunar cycle. Not a reliable alpha source, but exposed
+    as an optional filter/strategy so the self-learning pool can measure it
+    honestly (it usually scores flat and is dropped)."""
+    import math
+    # Synodic month ~29.53 days; new moon epoch (well-known reference date).
+    ref_dt = __import__("datetime").datetime(2000, 1, 6, 18, 14)
+    vals = []
+    for t in idx:
+        try:
+            dt = pd.Timestamp(t).to_pydatetime()
+            days = (dt - ref_dt).total_seconds() / 86400.0
+            phase = (days % 29.53) / 29.53  # 0..1 over the cycle
+            vals.append(2.0 * math.pi * phase)
+        except Exception:
+            vals.append(0.0)
+    ang = pd.Series(vals, index=idx)
+    # Full/new moon ~ when sin transitions; produce a smooth cushion factor
+    # 0..1 peaking near new moon, troughing near full moon.
+    return (1.0 - (np.sin(ang) + 1.0) / 2.0).clip(0, 1)
+
+
+def _swing_points(df, left=3, right=3):
+    """Boolean series of swing highs / lows using a local window (fractals)."""
+    h, l = df["High"], df["Low"]
+    swing_hi = pd.Series(False, index=df.index)
+    swing_lo = pd.Series(False, index=df.index)
+    for i in range(left + right, len(df) - 1):
+        win_h = h.iloc[i - left:i + right + 1]
+        win_l = l.iloc[i - left:i + right + 1]
+        if h.iloc[i] == win_h.max():
+            swing_hi.iloc[i] = True
+        if l.iloc[i] == win_l.min():
+            swing_lo.iloc[i] = True
+    return swing_hi, swing_lo
+
+
+def _fib_levels(lo, hi):
+    """Return dict of classic Fibonacci retracement/extension levels."""
+    rng = hi - lo
+    return {
+        0.236: hi - 0.236 * rng,
+        0.382: hi - 0.382 * rng,
+        0.5: hi - 0.5 * rng,
+        0.618: hi - 0.618 * rng,
+        0.786: hi - 0.786 * rng,
+    }
+
+
+def _fvg_series(df):
+    """Fair Value Gap: a 3-candle imbalance where candle1.High < candle3.Low
+    (bullish gap) or candle1.Low > candle3.High (bearish gap). Returns a
+    DataFrame with bull_fvg / bear_fvg boolean marks aligned to the gap candle."""
+    h, l = df["High"], df["Low"]
+    n = len(df)
+    bull = pd.Series(False, index=df.index)
+    bear = pd.Series(False, index=df.index)
+    for i in range(2, n):
+        if h.iloc[i - 2] < l.iloc[i]:
+            bull.iloc[i] = True
+        if l.iloc[i - 2] > h.iloc[i]:
+            bear.iloc[i] = True
+    return pd.DataFrame({"bull_fvg": bull, "bear_fvg": bear}, index=df.index)
+
+
+def _order_blocks(df, n=5):
+    """Supply/demand 'order blocks': last down/up candle set before an impulsive
+    move. Approximated by marking candles whose range is large and that precede
+    a strong close above the prior high (demand). Returns a DataFrame of
+    support (demand) and resistance (supply) zonal values (rolling-stale)."""
+    h, l, c = df["High"], df["Low"], df["Close"]
+    vol = df["Volume"]
+    avol = vol.rolling(20).mean().replace(0, np.nan)
+    vivid = vol > 1.5 * avol.fillna(vol.mean())
+    demand = pd.Series(np.nan, index=df.index)   # price below = buy zone
+    supply = pd.Series(np.nan, index=df.index)   # price above = sell zone
+    for i in range(1, len(df)):
+        if vivid.iloc[i] and c.iloc[i] > h.iloc[i - 1]:
+            demand.iloc[i] = l.iloc[i - 1]       # demand candle low
+        if vivid.iloc[i] and c.iloc[i] < l.iloc[i - 1]:
+            supply.iloc[i] = h.iloc[i - 1]       # supply candle high
+    demand = demand.ffill()   # zone persists until revisited
+    supply = supply.ffill()
+    return pd.DataFrame({"demand": demand, "supply": supply}, index=df.index)
+
+
+def _structure_series(df, lookback=10):
+    """Market-structure helpers: BOS (break of structure, continuation) and
+    CHoCH (change of character, reversal). Returns DataFrame with the latest
+    swing HL/LH levels carried forward so an entry can require structure
+    confirmation."""
+    sh, sl = _swing_points(df, left=3, right=3)
+    # Carry last confirmed swing levels forward.
+    last_hi = sh.where(sh).ffill()
+    last_lo = sl.where(sl).ffill()
+    return pd.DataFrame({
+        "prior_swing_low": last_lo,
+        "prior_swing_high": last_hi,
+    }, index=df.index)
+
+
+def _divergence_series(df, rsi_period=14):
+    """RSI divergence: price vs RSI making higher-highs/lower-lows. Returns a
+    DataFrame with bull_div (price LLL + RSI HLL -> bullish) and bear_div."""
+    close = df["Close"]
+    d = close.diff()
+    gain = d.clip(lower=0)
+    loss = -d.clip(upper=0)
+    ag = gain.ewm(alpha=1 / rsi_period, min_periods=rsi_period).mean()
+    al = loss.ewm(alpha=1 / rsi_period, min_periods=rsi_period).mean()
+    rsi = 100 - 100 / (1 + ag / al)
+    sh, sl = _swing_points(df, left=3, right=3)
+    bull = pd.Series(False, index=df.index)
+    bear = pd.Series(False, index=df.index)
+    # Simple sliding check on recent swing lows (price) vs RSI.
+    lows_idx = sl[sl].index.tolist()
+    if len(lows_idx) >= 2:
+        i2, i1 = lows_idx[-1], lows_idx[-2]
+        if close.loc[i2] < close.loc[i1] and rsi.loc[i2] > rsi.loc[i1]:
+            bull.loc[i2] = True
+    highs_idx = sh[sh].index.tolist()
+    if len(highs_idx) >= 2:
+        j2, j1 = highs_idx[-1], highs_idx[-2]
+        if close.loc[j2] > close.loc[j1] and rsi.loc[j2] < rsi.loc[j1]:
+            bear.loc[j2] = True
+    return pd.DataFrame({"bull_div": bull, "bear_div": bear}, index=df.index)
+
+
+def _harmonic_series(df, scope=120):
+    """Detect a Gartley-style ABCD harmonic: X->A->B->C->D with AB retrace and
+    BC extension using fib ratios. Marks a bullish/bearish setup when the D
+    point lands in the 0.786-XA zone. Light approximation of strict SMC."""
+    close = df["Close"]
+    n = len(df)
+    bull = pd.Series(False, index=df.index)
+    bear = pd.Series(False, index=df.index)
+    h, l = df["High"], df["Low"]
+    try:
+        # last swing pivot set within the scope window
+        seg = df.iloc[-scope:]
+        x = float(seg["Low"].min())
+        h_idx = seg["High"].idxmax()
+        a = float(seg["Close"].iloc[
+            (seg["Close"].index.get_loc(h_idx) - 1) if (seg["High"].idxmax() in seg["Close"].index) else 0])
+        # simplistic: use swing sequence
+        # Search recent XA extremes, then look for a C->D retrace toward 0.618/0.786
+        piv_hi = h.rolling(5, center=True).max() == h
+        piv_lo = l.rolling(5, center=True).min() == l
+        hi_idx = [i for i in piv_hi[piv_hi].index if i in close.index][-3:]
+        lo_idx = [i for i in piv_lo[piv_lo].index if i in close.index][-3:]
+        if len(hi_idx) >= 2 and len(lo_idx) >= 2:
+            # X low -> A high -> B low -> C high -> D
+            X = float(l.loc[lo_idx[0]])
+            A = float(h.loc[hi_idx[0]])
+            # D near the XA 0.786 retrace => bullish if price now near X+0.786*(A-X)
+            d_target = X + 0.786 * (A - X)
+            if abs(float(close.iloc[-1]) - d_target) / max(d_target, 1e-9) < 0.03:
+                bull.iloc[-1] = True
+        if len(lo_idx) >= 2 and len(hi_idx) >= 2:
+            X = float(h.loc[hi_idx[0]])
+            A = float(l.loc[lo_idx[0]])
+            d_target = X - 0.786 * (X - A)
+            if abs(float(close.iloc[-1]) - d_target) / max(d_target, 1e-9) < 0.03:
+                bear.iloc[-1] = True
+    except Exception:
+        pass
+    return pd.DataFrame({"bull_harmonic": bull, "bear_harmonic": bear}, index=df.index)
+
+
+def _heikin_ashi(df):
+    """Heikin-Ashi candles: noise-filtered OHLC built from running averages."""
+    o = df["Open"]
+    c = df["Close"]
+    h = df["High"]
+    l = df["Low"]
+    ha_c = ((o + h + l + c) / 4.0)
+    if len(ha_c) > 0:
+        ha_c.iloc[0] = (o.iloc[0] + h.iloc[0] + l.iloc[0] + c.iloc[0]) / 4.0
+    ha_c = ha_c.bfill()
+    ha_o = ha_c.shift(1).fillna((o.iloc[0] + ha_c.iloc[0]) / 2.0)
+    ha_h = pd.concat([h, ha_o, ha_c], axis=1).max(axis=1)
+    ha_l = pd.concat([l, ha_o, ha_c], axis=1).min(axis=1)
+    return pd.DataFrame({"ha_c": ha_c, "ha_o": ha_o, "ha_h": ha_h, "ha_l": ha_l},
+                        index=df.index)
+
+
+def _renko_states(df, brick_pct=0.015):
+    """Renko-style trend states: build brick closes from price movement,
+    ignoring time. Returns Series of 1 (up-brick) / 0 (down-brick) as of last
+    brick. brick_pct is the ATR-scaled brick size fraction."""
+    close = df["Close"]
+    atr = _atr14(df).iloc[-1]
+    brick = max(close.iloc[-1] * brick_pct, atr * 0.5) if atr and atr > 0 else close.iloc[-1] * brick_pct
+    state = 1
+    last_brick = float(close.iloc[0])
+    for c in close:
+        if state == 1:
+            if float(c) <= last_brick - brick:
+                state = 0
+                last_brick = float(c)
+            elif float(c) >= last_brick + brick:
+                last_brick = float(c)
+        else:
+            if float(c) >= last_brick + brick:
+                state = 1
+                last_brick = float(c)
+            elif float(c) <= last_brick - brick:
+                last_brick = float(c)
+    return state
+
+
+def _gann_trend(df, angle_deg=45):
+    """Gann-style geometric trend: whether current price is above the expected
+    1x1 (45-degree) progress line anchored at the swing low of the last
+    `lookback` bars. Returns 1 (bullish, above line) or 0 (bearish)."""
+    close = df["Close"]
+    low = df["Low"]
+    lookback = min(90, len(close) - 1)
+    if lookback <= 0:
+        return pd.Series(1, index=close.index)
+    anchor = float(low.iloc[-1 - lookback])
+    # expected price on a 1x1 line after `lookback` bars given observed slope scale
+    net = float(close.iloc[-1]) - anchor
+    step = net / max(lookback, 1)
+    gann_line = anchor + step * lookback * (np.tan(np.radians(angle_deg)) / np.tan(np.radians(45.0)))
+    above = float(close.iloc[-1]) >= gann_line
+    return pd.Series(1 if above else 0, index=close.index)
+
+
 REGIMES = ["BULL_TREND", "BEAR_TREND", "HIGH_VOL", "QUIET_RANGE"]
 
 
@@ -1544,6 +1779,8 @@ def current_regime(df):
 def _raw_position(df, cfg):
     mode = cfg["mode"]
     close = df["Close"]
+    high = df["High"]
+    low = df["Low"]
     if mode == "hold":
         return pd.Series(1.0, index=close.index)
 
@@ -1674,6 +1911,136 @@ def _raw_position(df, cfg):
         s[close > sar_s] = 1
         s[close < sar_s] = 0
 
+    # ---- Expanded strategy set: the technical-analysis library -------------
+    elif mode == "heikin":
+        # Heikin-Ashi smoothing: go long while HA close above HA open (no lower
+        # shadow trend), flat on reversal. Filters daily noise.
+        ha = _heikin_ashi(df)
+        s[ha["ha_c"] > ha["ha_o"]] = 1
+        s[ha["ha_c"] < ha["ha_o"]] = 0
+
+    elif mode == "renko":
+        # Renko brick trend: current brick state (1=up-brick, 0=down-brick).
+        brick = cfg.get("brick_pct", 0.015)
+        state = _renko_states(df, brick_pct=brick)
+        s[:] = state
+
+    elif mode == "fib":
+        # Fibonacci pullback: enter when price pulls back to the 0.5/0.618 zone
+        # of the most recent major swing and bounces, in an uptrend.
+        sh, sl = _swing_points(df, left=3, right=3)
+        swing_lo = sl[sl].index.tolist()
+        swing_hi = sh[sh].index.tolist()
+        pos = pd.Series(np.nan, index=close.index)
+        if len(swing_lo) >= 2 and len(swing_hi) >= 2:
+            lo_i, hi_i = swing_lo[-1], swing_hi[-1]
+            lo_v = float(low.loc[lo_i])
+            hi_v = float(high.loc[hi_i])
+            if abs(hi_v - lo_v) > 1e-9:
+                fib = _fib_levels(lo_v, hi_v)
+                zone_bottom, zone_top = fib[0.5], fib[0.618]
+                # demand zone: price between 0.5 and 0.618
+                in_zone = (close >= zone_bottom) & (close <= zone_top)
+                entry = in_zone & (close > close.rolling(50).mean().shift(1).fillna(close))
+                pos[entry] = 1
+                # exit above the swing high target or below the zone
+                pos[close > hi_v] = 0
+                pos[close < zone_bottom] = 0
+        pos.fillna(0, inplace=True)
+        s = pos
+
+    elif mode == "ellott":
+        # Elliott-style: count 5-wave impulse via progressive higher highs.
+        # Simplified: long while making higher highs with step-up structure.
+        if len(close) > 20:
+            hh = close.diff(5) > 0
+            wave = hh.rolling(5).mean() > 0.6   # persistent impulse
+            s[wave] = 1
+            s[~wave.fillna(False)] = 0
+
+    elif mode == "harmonic":
+        # Geometric harmonic pattern (Gartley-style) at the D retrace point.
+        hm = _harmonic_series(df)
+        s[hm["bull_harmonic"].fillna(False)] = 1
+        s[hm["bear_harmonic"].fillna(False)] = 0
+
+    elif mode == "gann":
+        # Gann 1x1 geometric trend: long when above the 45-degree line.
+        g = _gann_trend(df, cfg.get("angle", 45))
+        s[:] = g.values
+
+    elif mode == "divergence":
+        # RSI/price divergence: bull div (lower low in price, higher low in RSI)
+        # = buy; bear div = sell. Hold after a bull set-up until a bear div or
+        # the holding-period trailing logic takes over.
+        dv = _divergence_series(df)
+        bull = dv["bull_div"].fillna(False)
+        bear = dv["bear_div"].fillna(False)
+        s[bull] = 1
+        s[bear] = 0
+
+    elif mode == "breakout":
+        # Breakout: move > N-day range high on volume momentum.
+        n = int(cfg.get("range", 20))
+        rng_hi = close.rolling(n).max().shift(1)
+        vol = df["Volume"]
+        vol_ok = vol > 1.5 * vol.rolling(20).mean().shift(1).fillna(vol)
+        s[(close > rng_hi) & vol_ok.fillna(False)] = 1
+        # exit back inside the range
+        s[close < close.rolling(n).mean()] = 0
+
+    elif mode == "reversal":
+        # Reversal: capture a trend change (CHoCH-like) after exhaustion.
+        ob = _order_blocks(df)
+        sh, sl = _swing_points(df, left=3, right=3)
+        # demand bounce off recent structure low / demand zone
+        entry = (close <= close.shift(1)) & (close >= close.rolling(5).min().shift(1)) & (close > close.rolling(20).max().shift(1) * 0.98)
+        s[entry & (close > close.rolling(10).mean().shift(1).fillna(close))] = 1
+        s[close < close.rolling(5).mean().shift(1)] = 0
+        # re-raise if demand zone present
+        if ob is not None and "demand" in ob and not ob["demand"].iloc[-1] != ob["demand"].iloc[-1]:
+            s[close >= ob["demand"].fillna(-1e9)] = 1
+
+    elif mode == "smc":
+        # Smart Money: BOS/CHoCH structure with order-block supply/demand.
+        ob = _order_blocks(df)
+        st = _structure_series(df)
+        # bullish BOS: price closes above the prior swing high (structure break)
+        bos_break = close > st["prior_swing_high"].shift(1).fillna(close)
+        belong_demand = (ob["demand"].isna()) | (close >= ob["demand"].fillna(close))
+        s[(bos_break & belong_demand.fillna(True))] = 1
+        # bearish CHoCH: loss of higher-low -> exit
+        choch = close < st["prior_swing_low"].shift(1).fillna(close)
+        s[choch] = 0
+
+    elif mode == "fvg":
+        # Fair Value Gap: buy the pullback into an unfilled bullish FVG.
+        f = _fvg_series(df)
+        st = _structure_series(df)
+        # demand context: a bullish gap exists and price revisits the gap zone
+        bull_gap = f["bull_fvg"].fillna(False)
+        pull_to_gap = close <= close.rolling(3).max().shift(1).fillna(close)
+        s[(bull_gap & pull_to_gap)] = 1
+        s[close < st["prior_swing_low"].shift(1).fillna(close)] = 0
+
+    elif mode == "supply_demand":
+        # Supply & Demand: buy the demand zone rejection, sell supply.
+        ob = _order_blocks(df)
+        demand_zone = ob["demand"].fillna(np.nan)
+        supply_zone = ob["supply"].fillna(np.nan)
+        near_demand = close <= demand_zone * 1.02
+        bounce = close > close.shift(2).fillna(close)
+        s[(near_demand & bounce) & ~demand_zone.isna()] = 1
+        near_supply = close >= supply_zone * 0.98
+        s[(near_supply & ~supply_zone.isna())] = 0
+
+    elif mode == "moon":
+        # Lunar-cycle tilt (weak/esoteric). Exposed so the self-learning pool can
+        # measure it honestly; typically scores flat and is never selected.
+        moon = _moon_phase_series(close.index)
+        s[moon >= 0.5] = 1
+        s[moon < 0.5] = 0
+
     if cfg.get("trend"):
         ok_trend = close > close.rolling(int(cfg["trend"])).mean()
         entries = s == 1
@@ -1754,6 +2121,34 @@ def candidates():
                   "label": "Parabolic SAR +trend100"})
     cands.append({"mode": "parabolic", "af": 0.05, "af_max": 0.30, "trend": 200,
                   "vol_mult": 1.25, "label": "Parabolic SAR fast tr+vol"})
+
+    # ---- Expanded technical-analysis library (self-learning pool) ---------
+    cands.append({"mode": "heikin", "label": "Heikin-Ashi trend"})
+    cands.append({"mode": "renko", "brick_pct": 0.015, "label": "Renko brick"})
+    cands.append({"mode": "renko", "brick_pct": 0.02, "trend": 200,
+                  "label": "Renko brick +trend"})
+    cands.append({"mode": "fib", "label": "Fibonacci pullback"})
+    cands.append({"mode": "fib", "trend": 200, "vol_mult": 1.25,
+                  "label": "Fibonacci +trend/vol"})
+    cands.append({"mode": "ellott", "label": "Elliott impulse"})
+    cands.append({"mode": "harmonic", "label": "Harmonic Gartley"})
+    cands.append({"mode": "harmonic", "trend": 200, "label": "Harmonic +trend"})
+    cands.append({"mode": "gann", "angle": 45, "label": "Gann 1x1"})
+    cands.append({"mode": "divergence", "label": "RSI divergence"})
+    cands.append({"mode": "divergence", "trend": 200, "label": "Divergence +trend"})
+    cands.append({"mode": "breakout", "range": 20, "label": "Volume breakout"})
+    cands.append({"mode": "breakout", "range": 55, "trend": 200,
+                  "label": "Volume breakout slow"})
+    cands.append({"mode": "reversal", "label": "Reversal"})
+    cands.append({"mode": "smc", "label": "SMC BOS/CHoCH"})
+    cands.append({"mode": "smc", "trend": 200, "label": "SMC +trend"})
+    cands.append({"mode": "fvg", "label": "Fair Value Gap"})
+    cands.append({"mode": "fvg", "trend": 200, "label": "FVG +trend"})
+    cands.append({"mode": "supply_demand", "label": "Supply & Demand"})
+    cands.append({"mode": "supply_demand", "trend": 200,
+                  "label": "Supply & Demand +trend"})
+    cands.append({"mode": "moon", "label": "Moon phase"})
+
     cands.extend(load_ai_proposals())
     return cands
 
@@ -2232,6 +2627,70 @@ def is_exit_signal(df, cfg):
                     if low.iloc[i] < prev_ep:
                         prev_ep = low.iloc[i]; cur_af = min(af_max, cur_af + af)
         return float(close.iloc[-1]) < cur_sar and not up
+
+    if mode == "heikin":
+        ha = _heikin_ashi(df)
+        # exit when HA close flips below HA open (trend exhausts)
+        return float(ha["ha_c"].iloc[-1]) < float(ha["ha_o"].iloc[-1])
+
+    if mode == "renko":
+        # exit when the renko brick flips to a down-brick
+        return _renko_states(df, brick_pct=cfg.get("brick_pct", 0.015)) == 0
+
+    if mode == "fib":
+        sh, sl = _swing_points(df, left=3, right=3)
+        swing_hi = sh[sh].index.tolist()
+        swing_lo = sl[sl].index.tolist()
+        if len(swing_hi) >= 1:
+            hi_v = float(df["High"].loc[swing_hi[-1]])
+            # exit at target above swing high, or below the zone bottom
+            return price >= hi_v or price <= hi_v - (hi_v * 0.05)
+        return True
+
+    if mode == "ellott":
+        # exit when the 5-bar higher-high impulse breaks down
+        return float(close.diff(5).iloc[-1]) < 0
+
+    if mode == "harmonic":
+        hm = _harmonic_series(df)
+        return bool(hm["bear_harmonic"].fillna(False).iloc[-1])
+
+    if mode == "gann":
+        g = _gann_trend(df, cfg.get("angle", 45))
+        return bool(g.iloc[-1] == 0)
+
+    if mode == "divergence":
+        dv = _divergence_series(df)
+        return bool(dv["bear_div"].fillna(False).iloc[-1])
+
+    if mode == "breakout":
+        n = int(cfg.get("range", 20))
+        return price < float(close.rolling(n).mean().iloc[-1])
+
+    if mode == "reversal":
+        # loss of the short-term(5) mean -> trend not reversing up anymore
+        return price < float(close.rolling(5).mean().iloc[-1])
+
+    if mode == "smc":
+        st = _structure_series(df)
+        # CHoCH: price breaks the prior swing low (uptrend invalidated)
+        swl = st["prior_swing_low"].iloc[-1]
+        return not np.isnan(swl) and price < swl
+
+    if mode == "fvg":
+        st = _structure_series(df)
+        swl = st["prior_swing_low"].iloc[-1]
+        return not np.isnan(swl) and price < swl
+
+    if mode == "supply_demand":
+        ob = _order_blocks(df)
+        sup = ob["supply"].iloc[-1]
+        # exit at the supply zone overhead
+        return not np.isnan(sup) and price >= sup
+
+    if mode == "moon":
+        moon = _moon_phase_series(close.index)
+        return float(moon.iloc[-1]) < 0.5
 
     return False
 
