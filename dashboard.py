@@ -156,10 +156,34 @@ def build_html():
     pnl = equity_val - 100000
 
     champ_rows = "".join(
-        f"<tr><td>{s}</td><td>{l}</td><td>{sc}</td><td>{u}</td></tr>"
+        "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(s, l, sc, u)
         for s, l, sc, u in champions)
-    journal_rows = "".join(f"<tr><td>{r}</td></tr>" for r in journal)
-    lesson_rows = "".join(f"<li>{r}</li>" for r in lessons)
+    journal_rows = "".join("<tr><td>{}</td></tr>".format(r) for r in journal)
+    lesson_rows = "".join("<li>{}</li>".format(r) for r in lessons)
+
+    # Build these before the big f-string: nested f-strings with backslash
+    # escapes (like class=\"...\") are a SyntaxError on Python 3.11.
+    def _pos_td(v):
+        return 'class="pos"' if v >= 0 else 'class="neg"'
+    pos_rows = ""
+    for p in positions:
+        pos_rows += (
+            "<tr><td>{}</td><td>{}</td><td>${:,.2f}</td>"
+            "<td>${:,.0f}</td>"
+            "<td {}>${:+,.0f}</td></tr>".format(
+                p["symbol"], p["qty"], p["entry"], p["market_value"],
+                _pos_td(p["unrealized_pl"]), p["unrealized_pl"]))
+    if not pos_rows:
+        pos_rows = "<tr><td colspan=5>all cash — waiting for signals</td></tr>"
+
+    score_rows = ""
+    for s, n, a in live_scores:
+        verdict = "✅ trusted" if a >= 0 else "🔥 FIRED — brain refuses to re-elect"
+        score_rows += ("<tr><td>{}</td><td>{}</td>"
+                       "<td {}>{:+.2f}%</td><td>{}</td></tr>").format(
+                           s, n, _pos_td(a), a, verdict)
+    if not score_rows:
+        score_rows = "<tr><td colspan=4>no closed trades yet — learning begins after first exits</td></tr>"
 
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>AI Trading Robot — Dashboard</title>
@@ -193,17 +217,11 @@ li {{ margin:4px 0; color:#cbd5e1; }}
 </div>
 <h2>Open positions <span class="small">(snapshot {snap_time})</span></h2>
 <table><tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Value</th><th>P&L</th></tr>
-{''.join(f"<tr><td>{p['symbol']}</td><td>{p['qty']}</td><td>${p['entry']:.2f}</td>"
-         f"<td>${p['market_value']:,.0f}</td>"
-         f"<td class=\"{'pos' if p['unrealized_pl']>=0 else 'neg'}\">${p['unrealized_pl']:+,.0f}</td></tr>"
-    for p in positions) or '<tr><td colspan=5>all cash — waiting for signals</td></tr>'}</table>
+{pos_rows}</table>
 <h2>Equity curve</h2><img src="data:image/png;base64,{png_b64}">
 <h2>Live strategy scoreboard</h2>
 <table><tr><th>Strategy</th><th>Closed trades</th><th>Avg P&amp;L %</th><th>Verdict</th></tr>
-{''.join(f"<tr><td>{s}</td><td>{n}</td>"
-         f"<td class=\"{'pos' if a>=0 else 'neg'}\">{a:+.2f}%</td>"
-         f"<td>{'✅ trusted' if a>=0 else '🔥 FIRED — brain refuses to re-elect'}</td></tr>"
-    for s, n, a in live_scores) or '<tr><td colspan=4>no closed trades yet — learning begins after first exits</td></tr>'}</table>
+{score_rows}</table>
 <h2>Champion strategies (per market)</h2>
 <table><tr><th>Market</th><th>Strategy</th><th>Test score</th><th>Checked</th></tr>{champ_rows}</table>
 <h2>Recent activity (journal)</h2><table>{journal_rows}</table>
