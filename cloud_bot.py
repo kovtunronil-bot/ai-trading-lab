@@ -531,7 +531,10 @@ def run_cloud():
         # Framework strategies: OVERRIDE notional with risk-based sizing.
         # Position size = (Equity * 1.5%) / |Entry - SL|.  The SL/TP are
         # stored in framework_levels so the risk_manager can use them.
+        # fw_size is preserved and re-applied right before order placement so
+        # the volume-based conviction/momentum sizing can't clobber it.
         fw_mode = cfg.get("mode") in ("smc_fw", "breakout_fw", "divergence_fw")
+        fw_size = None
         if fw_mode:
             rl = brain.compute_risk_levels(df, cfg)
             fw_entry = float(rl["entry"].iloc[-1])
@@ -541,12 +544,15 @@ def run_cloud():
             if fw_sig and fw_sl > 0 and fw_entry > 0:
                 units = brain.risk_position_size(equity, brain.RISK_PER_TRADE_PCT, fw_entry, fw_sl)
                 sized_notional = units * fw_entry
+                fw_size = sized_notional
                 framework_levels[symbol] = {"sl": fw_sl, "tp": fw_tp, "entry": fw_entry}
                 print(f">>> FRAMEWORK {symbol} {cfg.get('mode')}: "
                       f"SL={fw_sl:.2f} TP={fw_tp:.2f} -> "
                       f"{units:.2f} units = ${sized_notional:,.0f} (1.5% risk)")
             else:
                 sized_notional = 0
+                fw_size = None
+                framework_levels.pop(symbol, None)
                 print(f">>> FRAMEWORK {symbol}: no signal this bar")
 
         if recent_mom < -0.03:
@@ -651,6 +657,11 @@ def run_cloud():
                             action, detail = "NEWS-BLOCKED", reason[:60]
 
                     if action == "WAIT":
+                        # Framework strategies: the risk-based size is the
+                        # authority, but still respect the heat/sector caps so
+                        # no single trade breaks the portfolio-level limits.
+                        if fw_size is not None:
+                            sized_notional = max(200, int(fw_size * size_mult))
                         oid, st, fill_price = smart_buy(symbol, sized_notional, price)
                         if st == "filled" and fill_price:
                             brain.set_position_strategy(symbol, cfg.get("label", "?"))

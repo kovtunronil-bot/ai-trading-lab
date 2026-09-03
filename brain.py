@@ -2995,6 +2995,11 @@ def fundamental_gate(symbol, df=None, max_pe=200.0, min_market_cap=3e8):
     """
     if symbol in CRYPTO:
         return False, ""
+    # Explicit safety block: worst historical performer in this portfolio.
+    # TSLA's P/E gate would catch it anyway, but pin it down so it can't slip
+    # through via data hiccups.
+    if symbol == "TSLA":
+        return True, "explicit blacklist (worst historical performer)"
     try:
         info = _info_cached(symbol)
         if not info:
