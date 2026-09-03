@@ -2041,6 +2041,14 @@ def _raw_position(df, cfg):
         s[moon >= 0.5] = 1
         s[moon < 0.5] = 0
 
+    elif mode in ("smc_fw", "breakout_fw", "divergence_fw"):
+        # Framework strategies: entry signal comes from compute_risk_levels()
+        # which determines the precise entry bar and SL/TP levels.
+        rl = compute_risk_levels(df, cfg)
+        s[rl["signal"] == 1] = 1
+        # exit on the next bar after the strategy's SL or TP zone is breached
+        s[rl["signal"] == 0] = np.nan
+
     if cfg.get("trend"):
         ok_trend = close > close.rolling(int(cfg["trend"])).mean()
         entries = s == 1
@@ -2148,6 +2156,13 @@ def candidates():
     cands.append({"mode": "supply_demand", "trend": 200,
                   "label": "Supply & Demand +trend"})
     cands.append({"mode": "moon", "label": "Moon phase"})
+
+    # ---- Framework strategies (rule-based with SL/TP + risk sizing) --------
+    cands.append({"mode": "smc_fw", "label": "SMC Order Flow"})
+    cands.append({"mode": "breakout_fw", "label": "Breakout & Retest"})
+    cands.append({"mode": "breakout_fw", "trend": 200, "label": "Breakout Retest +trend"})
+    cands.append({"mode": "divergence_fw", "label": "Divergence Reversal"})
+    cands.append({"mode": "divergence_fw", "trend": 100, "label": "Divergence +trend100"})
 
     cands.extend(load_ai_proposals())
     return cands
@@ -2692,6 +2707,12 @@ def is_exit_signal(df, cfg):
         moon = _moon_phase_series(close.index)
         return float(moon.iloc[-1]) < 0.5
 
+    if mode in ("smc_fw", "breakout_fw", "divergence_fw"):
+        # Framework strategy exits are handled by the risk_manager via
+        # compute_risk_levels SL/TP, not by the strategy exit signal.
+        # Return False so the risk_manager SL/TP logic governs exits.
+        return False
+
     return False
 
 
@@ -2852,6 +2873,94 @@ def vol_targeted_notional(vols, symbol, base=11000.0, floor=4000.0, cap=24000.0)
         return base
     size = base * (med / target)
     return round(min(max(size, floor), cap), -2)
+
+
+RISK_PER_TRADE_PCT = 0.015
+
+
+def risk_position_size(equity, risk_pct, entry_price, sl_price):
+    """Position sizing from risk: (Equity * Risk%) / |Entry - SL|.
+    Returns number of units (shares/coins).  Capped at $24k notional.
+    Returns 0 if stop distance < 0.2% (too tight = unsafe sizing)."""
+    if sl_price <= 0 or entry_price <= 0:
+        return 0
+    dist = abs(entry_price - sl_price)
+    dist_pct = dist / entry_price
+    if dist_pct < 0.002:
+        return 0
+    dollar_risk = equity * risk_pct
+    units = dollar_risk / dist
+    max_units = 24000.0 / entry_price if entry_price > 0 else 0
+    return round(min(units, max_units), 4)
+
+
+def compute_risk_levels(df, cfg):
+    """For framework strategies, compute per-bar entry / SL / TP.
+    Returns DataFrame with columns: signal, entry, sl, tp."""
+    close = df["Close"]; high = df["High"]; low = df["Low"]
+    vol = df["Volume"]
+    out = pd.DataFrame({
+        "signal": 0, "entry": np.nan, "sl": np.nan, "tp": np.nan,
+    }, index=df.index)
+    mode = cfg.get("mode", "")
+
+    if mode == "smc_fw":
+        sh, sl_pts = _swing_points(df, left=3, right=3)
+        sw_lo = [i for i in sl_pts[sl_pts].index]
+        for i in range(6, len(close)):
+            if not sw_lo:
+                continue
+            recent_lo = float(low.loc[sw_lo[-1]])
+            if float(low.iloc[i]) < recent_lo and float(close.iloc[i]) > recent_lo:
+                if i+1 < len(close) and float(close.iloc[i+1]) > float(high.iloc[i]):
+                    sl_price = float(low.iloc[i]) * 0.998
+                    entry_price = float(close.iloc[i+1])
+                    above = [s for s in sh[sh].index if float(high.loc[s]) > entry_price and close.index.get_loc(s) > i]
+                    tp_price = float(high.loc[above[0]]) if above else entry_price * 1.06
+                    out.iloc[i+1] = [1, entry_price, sl_price, tp_price]
+
+    elif mode == "breakout_fw":
+        rng_hi = close.rolling(20).max().shift(1)
+        vol_avg = vol.rolling(20).mean().shift(1).fillna(vol.mean())
+        vol_ok = vol > 1.5 * vol_avg
+        brk = (close > rng_hi) & vol_ok.fillna(False)
+        for bi in brk[brk].index:
+            bi_loc = close.index.get_loc(bi)
+            broken = float(rng_hi.loc[bi])
+            bh = float(high.iloc[bi_loc])
+            for j in range(bi_loc+1, min(bi_loc+6, len(close))):
+                if abs(float(low.iloc[j]) - broken) / broken < 0.005:
+                    ep = float(close.iloc[j])
+                    sl_p = float(low.iloc[j]) * 0.998
+                    tp_p = broken + 1.618 * (bh - broken)
+                    out.iloc[j] = [1, ep, sl_p, tp_p]
+                    break
+
+    elif mode == "divergence_fw":
+        d = close.diff(); gain = d.clip(lower=0); loss = -d.clip(upper=0)
+        ag = gain.ewm(alpha=1/14, min_periods=14).mean()
+        al = loss.ewm(alpha=1/14, min_periods=14).mean()
+        rsi = 100 - 100 / (1 + ag / al)
+        sh, sl_pts = _swing_points(df, left=3, right=3)
+        sw_hi = sh[sh].index.tolist()
+        sw_lo = sl_pts[sl_pts].index.tolist()
+        if len(sw_hi) >= 2 and len(sw_lo) >= 1:
+            for hi_idx in sw_hi[-3:]:
+                hi_loc = close.index.get_loc(hi_idx)
+                if hi_loc < 5: continue
+                cur_h = float(high.iloc[hi_loc])
+                cur_c = float(close.iloc[hi_loc])
+                prev_c = float(close.iloc[hi_loc-1])
+                body = abs(cur_c - prev_c)
+                wick_up = cur_h - max(cur_c, prev_c)
+                is_reversal = (wick_up > 2*body) and body > 0
+                prev_hi_loc = close.index.get_loc(sw_hi[-2])
+                rsi_div = (cur_h >= float(high.loc[sw_hi[-2]])) and (float(rsi.iloc[hi_loc]) < float(rsi.iloc[prev_hi_loc]))
+                if is_reversal and rsi_div:
+                    lo_val = float(low.loc[sw_lo[-1]])
+                    out.iloc[hi_loc] = [1, cur_c, cur_h*1.002, cur_c - 0.382*(cur_c-lo_val)]
+
+    return out
 
 
 def correlation_gate(closes, symbol, held_symbols, threshold=0.70, max_alike=2):

@@ -212,6 +212,17 @@ def run_cloud():
         # sell logic (e.g. MSFT EMA9/21 at 32% win-rate).
         failing = brain.strategy_is_failing(internal)
         stop_fraction = brain.FAILING_STOP if failing else brain.POSITION_STOP_LOSS
+        # Framework strategies: use the strategy-specific SL (saved in config
+        # at entry time) instead of the generic 8% stop.  This respects the
+        # strategy's own risk framework (SL at sweep extreme, retest low, etc.).
+        fw_sl = None
+        try:
+            _cfg = brain.load_config(internal)
+            fw_sl = _cfg.get("fw_sl") if _cfg else None
+            if fw_sl and float(fw_sl) > 0:
+                stop_fraction = max(1 - float(fw_sl) / entry, 0.02)  # min 2%
+        except Exception:
+            pass
         # 1) hard stop-loss (adaptive to strategy quality)
         if cur < entry * (1 - stop_fraction):
             if internal not in brain.CRYPTO and not market_open:
@@ -486,6 +497,7 @@ def run_cloud():
         print(f"  monte-carlo risk advisor skipped ({e})")
 
     actions = {}
+    framework_levels = {}
     for symbol in brain.ALL:
         cfg = brain.load_config(symbol)
         if symbol not in all_data or all_data[symbol].empty:
@@ -515,6 +527,27 @@ def run_cloud():
             print(f">>> CRYPTO-BOOST {symbol}: planned ${planned_notional:,.0f} (1.8x)")
 
         sized_notional = planned_notional * conviction
+
+        # Framework strategies: OVERRIDE notional with risk-based sizing.
+        # Position size = (Equity * 1.5%) / |Entry - SL|.  The SL/TP are
+        # stored in framework_levels so the risk_manager can use them.
+        fw_mode = cfg.get("mode") in ("smc_fw", "breakout_fw", "divergence_fw")
+        if fw_mode:
+            rl = brain.compute_risk_levels(df, cfg)
+            fw_entry = float(rl["entry"].iloc[-1])
+            fw_sl    = float(rl["sl"].iloc[-1])
+            fw_tp    = float(rl["tp"].iloc[-1])
+            fw_sig   = int(rl["signal"].iloc[-1])
+            if fw_sig and fw_sl > 0 and fw_entry > 0:
+                units = brain.risk_position_size(equity, brain.RISK_PER_TRADE_PCT, fw_entry, fw_sl)
+                sized_notional = units * fw_entry
+                framework_levels[symbol] = {"sl": fw_sl, "tp": fw_tp, "entry": fw_entry}
+                print(f">>> FRAMEWORK {symbol} {cfg.get('mode')}: "
+                      f"SL={fw_sl:.2f} TP={fw_tp:.2f} -> "
+                      f"{units:.2f} units = ${sized_notional:,.0f} (1.5% risk)")
+            else:
+                sized_notional = 0
+                print(f">>> FRAMEWORK {symbol}: no signal this bar")
 
         if recent_mom < -0.03:
             sized_notional *= 0.5
@@ -621,6 +654,14 @@ def run_cloud():
                         oid, st, fill_price = smart_buy(symbol, sized_notional, price)
                         if st == "filled" and fill_price:
                             brain.set_position_strategy(symbol, cfg.get("label", "?"))
+                            # Save framework SL/TP to config so risk_manager can use them.
+                            if symbol in framework_levels:
+                                _fl = framework_levels[symbol]
+                                cfg["fw_sl"] = _fl["sl"]
+                                cfg["fw_tp"] = _fl["tp"]
+                                cfg["fw_entry"] = _fl["entry"]
+                                cfg["symbol"] = symbol
+                                brain.save_config(cfg)
                             action, detail = "BUY", f"${sized_notional:,.0f} conv={conviction:.0%}"
                             brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "BUY",
                                             sized_notional, None, None, st, "smart-limit",
