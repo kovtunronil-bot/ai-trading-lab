@@ -215,4 +215,11 @@ if __name__ == "__main__":
     html = build_html()
     with open("dashboard.html", "w", encoding="utf-8") as f:
         f.write(html)
-    print("dashboard.html written")
+    # Also publish to the Pages dir so the GitHub Pages site (the phone link)
+    # serves the FULL dashboard (all markets, equity, positions, P&L) instead
+    # of only the crypto summary.
+    import os
+    os.makedirs("_pages", exist_ok=True)
+    with open(os.path.join("_pages", "index.html"), "w", encoding="utf-8") as f:
+        f.write(html)
+    print("dashboard.html written (+ _pages/index.html)")
