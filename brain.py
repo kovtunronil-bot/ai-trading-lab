@@ -2042,7 +2042,8 @@ def _raw_position(df, cfg):
         s[moon < 0.5] = 0
 
     elif mode in ("smc_fw", "breakout_fw", "divergence_fw",
-                  "vwap_fw", "heikin_fw", "boll_fw"):
+                  "vwap_fw", "heikin_fw", "boll_fw",
+                  "orb_fw", "vwap_rev_fw", "flag_fw", "gap_fade_fw"):
         # Framework strategies: entry signal comes from compute_risk_levels()
         # which determines the precise entry bar and SL/TP levels.
         rl = compute_risk_levels(df, cfg)
@@ -2284,6 +2285,11 @@ def candidates():
     cands.append({"mode": "heikin_fw", "label": "Heikin-Ashi Momentum"})
     # Statistical Mean Reversion / Bollinger fade
     cands.append({"mode": "boll_fw", "label": "Bollinger Band Fade"})
+    # ---- Part-8 day-trading setups ----
+    cands.append({"mode": "orb_fw", "label": "Opening Range Breakout (ORB)"})
+    cands.append({"mode": "vwap_rev_fw", "label": "VWAP Reversion"})
+    cands.append({"mode": "flag_fw", "label": "Momentum Flag Pullback"})
+    cands.append({"mode": "gap_fade_fw", "label": "Gap Fade"})
 
     cands.extend(load_ai_proposals())
     return cands
@@ -2829,7 +2835,8 @@ def is_exit_signal(df, cfg):
         return float(moon.iloc[-1]) < 0.5
 
     if mode in ("smc_fw", "breakout_fw", "divergence_fw",
-                "vwap_fw", "heikin_fw", "boll_fw"):
+                "vwap_fw", "heikin_fw", "boll_fw",
+                "orb_fw", "vwap_rev_fw", "flag_fw", "gap_fade_fw"):
         # Framework strategy exits are governed primarily by the risk_manager
         # via compute_risk_levels SL/TP.  Heikin-Ashi Momentum additionally
         # exits on a red HA candle with a lower wick (trend exhausts).
@@ -3216,6 +3223,113 @@ def compute_risk_levels(df, cfg):
             sl_price = float(low.iloc[bi_loc]) * 0.99  # 1% below reversal low
             tp_price = float(mid.iloc[bi_loc])         # mean target
             out.iloc[bi_loc] = [1, entry_price, sl_price, tp_price]
+
+    elif mode == "orb_fw":
+        # Opening Range Breakout (Part 8).  Daily-bar proxy: the first
+        # `orb_bars` bars' High/Low form the range.  Enter when a later bar
+        # closes above the range high on above-average volume.  SL on the
+        # other side of the range; TP at 1:2 risk-reward.
+        n = cfg.get("orb_bars", 5)
+        rng_hi = high.rolling(n).max().shift(n)      # high of first-n closed
+        rng_lo = low.rolling(n).min().shift(n)
+        vol_avg = vol.rolling(20).mean().shift(1).fillna(vol.mean())
+        brk = (close > rng_hi) & (vol > 1.5 * vol_avg) & rng_hi.notna()
+        for bi in brk[brk].index:
+            bi_loc = close.index.get_loc(bi)
+            ep = float(close.iloc[bi_loc])
+            rh = float(rng_hi.loc[bi]); rl_o = float(rng_lo.loc[bi])
+            sl_p = rl_o * 0.998
+            dist = abs(ep - sl_p)
+            if dist <= 0:
+                continue
+            tp_p = ep + 2 * dist
+            out.iloc[bi_loc] = [1, ep, sl_p, tp_p]
+
+    elif mode == "vwap_rev_fw":
+        # VWAP Reversion (Part 8).  Price stretched well below VWAP (rolling
+        # proxy) with momentum fading -> fade back toward VWAP.  Entry on a
+        # bullish reversal candle after the stretch; SL beyond the extreme low;
+        # TP at or part-way to VWAP.
+        vwap = _vwap_series(df).fillna(close.mean())
+        stretch = (vwap - close) / vwap.replace(0, np.nan)
+        stretched = stretch > cfg.get("stretch_sd", 0.02)
+        rng = (high - low).replace(0, np.nan)
+        body = (close - df["Open"]).abs()
+        lower_wick = df["Open"] - low
+        doji = body / rng < 0.2
+        hammer = lower_wick > 2 * body
+        rev = doji | hammer
+        trig = stretched & rev
+        for bi in trig[trig].index:
+            bi_loc = close.index.get_loc(bi)
+            ep = float(close.iloc[bi_loc])
+            sl_p = float(low.iloc[bi_loc]) * 0.998
+            vw = float(vwap.loc[bi])
+            if vw > ep:
+                tp_p = vw
+            else:
+                tp_p = ep * 1.02
+            if tp_p <= sl_p:
+                tp_p = ep * 1.02
+            out.iloc[bi_loc] = [1, ep, sl_p, tp_p]
+
+    elif mode == "flag_fw":
+        # Momentum Pullback / Flag (Part 8).  Define an impulse leg (recent
+        # swing low -> swing high), then a shallow consolidation (flag).  Entry
+        # when price resumes in the impulse direction; SL below the flag low;
+        # TP from the measured move (project prior impulse length).
+        sh, sl_ = _swing_points(df, left=2, right=2)
+        sw_hi = sh[sh].index.tolist()
+        sw_lo = sl_[sl_].index.tolist()
+        for i in range(15, len(close)):
+            near_hi = [s for s in sw_hi if close.index.get_loc(s) < i]
+            near_lo = [s for s in sw_lo if close.index.get_loc(s) < i]
+            if len(near_lo) < 2 or len(near_hi) < 1:
+                continue
+            lo_i = float(low.loc[near_lo[-2]])
+            hi_i = float(high.loc[near_hi[-1]])
+            if hi_i <= lo_i:
+                continue
+            flag_lo = float(low.iloc[i-5:i].min())
+            flag_hi = float(high.iloc[i-5:i].max())
+            impulse = hi_i - lo_i
+            if impulse <= 0:
+                continue
+            # consolidation: flag depth small relative to impulse, uptrend
+            if (hi_i - flag_lo) > 0.5 * impulse and float(close.iloc[i]) > hi_i:
+                ep = float(close.iloc[i])
+                sl_p = flag_lo * 0.998
+                dist = abs(ep - sl_p)
+                if dist <= 0:
+                    continue
+                tp_p = ep + impulse  # measured move
+                out.iloc[i] = [1, ep, sl_p, tp_p]
+
+    elif mode == "gap_fade_fw":
+        # Gap Fade (Part 8) - LONG-ONLY adaptation.  A large opening gap down
+        # that is not backed by sustained selling (the open prints a bullish
+        # reversal candle / doji); fade it, buying back toward yesterday's
+        # close.  Daily-bar proxy: today's Open vs yesterday's Close = the gap.
+        # (The mirror gap-up fade would be a short trade; this bot is
+        # long-only, so we only take the long side of a gap-down reversal.)
+        prev_close = close.shift(1)
+        gap_pct = (df["Open"] - prev_close) / prev_close.replace(0, np.nan)
+        big_gap_dn = gap_pct < -cfg.get("min_gap", 0.015)
+        rng = (high - low).replace(0, np.nan)
+        body = (close - df["Open"]).abs()
+        lower_wick = df[["Open", "Close"]].min(axis=1) - low
+        doji = body / rng < 0.2
+        hammer = lower_wick > 2 * body.replace(0, np.nan)
+        rev_dn = doji | hammer
+        trigger = big_gap_dn & rev_dn
+        for bi in trigger[trigger].index:
+            bi_loc = close.index.get_loc(bi)
+            ep = float(close.iloc[bi_loc])
+            sl_p = float(low.iloc[bi_loc]) * 0.998
+            tp_p = float(prev_close.loc[bi])  # gap-close target
+            if tp_p <= sl_p:
+                tp_p = ep * 1.02
+            out.iloc[bi_loc] = [1, ep, sl_p, tp_p]
 
     return out
 
