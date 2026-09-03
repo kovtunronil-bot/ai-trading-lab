@@ -1,12 +1,11 @@
 {
-  "mode": "atr_breakout",
-  "entry": 30,
-  "exit": 15,
-  "mult": 0.5,
-  "label": "ATRbrk 30d x0.5",
+  "mode": "ema_cross",
+  "fast": 20,
+  "slow": 50,
+  "label": "EMA20/50",
   "symbol": "SPY",
   "regime": "QUIET_RANGE",
-  "test_score": 1.0984559999999999,
+  "test_score": 1.851816,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,
@@ -16,5 +15,5 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-02T14:07:58"
+  "updated": "2026-09-03T15:15:26"
 }
