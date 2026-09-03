@@ -307,6 +307,20 @@ def run_cloud():
     except Exception:
         pass
 
+    # EMERGENCY PROTECTION: intraday max-daily-loss kill-switch (guide Part 4).
+    # Measures today's P&L against where the day STARTED (not yesterday's
+    # close) and halts ALL new entries for the rest of the day once today's
+    # loss exceeds the threshold (2.5%).  Positions already held are still
+    # managed/closed by the risk manager, but no new risk is taken.
+    try:
+        _kill, _kill_loss, _kill_msg = brain.daily_kill_switch(equity, threshold=0.025)
+        if _kill:
+            allow_entries = False
+            print(f">>> DAILY KILL-SWITCH: {_kill_loss*100:+.1f}% today — no new entries rest of day")
+            brain.send_alert(_kill_msg)
+    except Exception as e:
+        print(f"  daily kill-switch skipped ({e})")
+
     # EMERGENCY PROTECTION: HALT-level trim. At -10% drawdown, forcibly
     # trim the 2 largest positions by 30% each to reduce risk while still
     # keeping some exposure (not a full liquidation like LOCKDOWN).

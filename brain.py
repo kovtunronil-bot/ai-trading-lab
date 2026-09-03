@@ -2951,6 +2951,48 @@ def save_state(state):
         json.dump(state, f, indent=2)
 
 
+def daily_kill_switch(equity, threshold=0.025):
+    """Max daily loss kill-switch (guide, Part 4).
+
+    Tracks today's starting equity (persisted in state.json) and halts new
+    entries once today's loss exceeds `threshold` (default 2.5%).  The day
+    baseline is recorded on the first run of a calendar day, so intraday
+    losses are measured against where the day started, not yesterday's close.
+
+    Returns (halted, day_loss_pct, alert_msg_or_None)."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    st = load_state()
+    day_start_key = f"day_start_{today}"
+    # Sticky: once the kill switch trips it stays tripped for the whole day,
+    # even if equity recovers intraday (guide: max daily loss = stop trading
+    # for the day, not "stop until it bounces back").
+    if st.get(f"killed_{today}"):
+        base = st.get("day_start_eq")
+        loss = (float(equity) / float(base) - 1) if base and float(base) > 0 else 0.0
+        return True, loss, (f"DAILY-KILL still active today: day loss {loss*100:+.1f}% "
+                            "- entries remain halted")
+    if st.get("day_start_date") != today:
+        # new trading day: reset baseline to current equity
+        st["day_start_date"] = today
+        st["day_start_eq"] = float(equity)
+        save_state(st)
+        return False, 0.0, None
+    base = st.get("day_start_eq")
+    if not base or float(base) <= 0:
+        st["day_start_eq"] = float(equity)
+        save_state(st)
+        return False, 0.0, None
+    loss = float(equity) / float(base) - 1
+    if loss < -threshold:
+        msg = (f"DAILY-KILL: day loss {loss*100:+.1f}% "
+               f"(from ${float(base):,.0f} start) - entries halted for today")
+        # keep the kill switch sticky for the whole day
+        st[f"killed_{today}"] = True
+        save_state(st)
+        return True, loss, msg
+    return False, loss, None
+
+
 def log_equity(equity, peak):
     conn = init_db()
     try:
