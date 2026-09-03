@@ -1,9 +1,9 @@
 {
-  "mode": "atr_breakout",
+  "mode": "flag_fw",
   "entry": 55,
   "exit": 27,
   "mult": 1.0,
-  "label": "ATRbrk 55d x1.0",
+  "label": "Momentum Flag Pullback",
   "symbol": "AAPL",
   "regime": "QUIET_RANGE",
   "test_score": 3.5453200000000002,
@@ -16,5 +16,11 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-03T16:41:49"
+  "updated": "2026-09-03T22:39:44",
+  "promoted": {
+    "from": "atr_breakout",
+    "mode": "flag_fw",
+    "framework_sharpe": 2.47,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }

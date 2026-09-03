@@ -1,8 +1,8 @@
 {
-  "mode": "ema_cross",
+  "mode": "flag_fw",
   "fast": 20,
   "slow": 50,
-  "label": "EMA20/50",
+  "label": "Momentum Flag Pullback",
   "symbol": "SPY",
   "regime": "QUIET_RANGE",
   "test_score": 1.8056640000000002,
@@ -15,5 +15,11 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-03T16:41:22"
+  "updated": "2026-09-03T22:39:44",
+  "promoted": {
+    "from": "ema_cross",
+    "mode": "flag_fw",
+    "framework_sharpe": 3.93,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }

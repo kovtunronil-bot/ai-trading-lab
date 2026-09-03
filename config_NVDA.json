@@ -1,10 +1,10 @@
 {
-  "mode": "rsi",
+  "mode": "flag_fw",
   "period": 3,
   "buy_below": 15,
   "sell_above": 60,
   "trend": 100,
-  "label": "RSI3 <15/60 +trend100",
+  "label": "Momentum Flag Pullback",
   "symbol": "NVDA",
   "regime": "QUIET_RANGE",
   "test_score": 1080.888864,
@@ -17,5 +17,11 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T16:41:49"
+  "updated": "2026-09-03T22:39:44",
+  "promoted": {
+    "from": "rsi",
+    "mode": "flag_fw",
+    "framework_sharpe": 3.78,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }

@@ -1,6 +1,6 @@
 {
-  "mode": "rsi",
-  "label": "RSI14 <25/55",
+  "mode": "orb_fw",
+  "label": "Opening Range Breakout (ORB)",
   "symbol": "TSLA",
   "regime": "QUIET_RANGE",
   "test_score": 52.42,
@@ -13,8 +13,14 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T16:41:50",
+  "updated": "2026-09-03T22:39:44",
   "period": 14,
   "buy_below": 25,
-  "sell_above": 55
+  "sell_above": 55,
+  "promoted": {
+    "from": "rsi",
+    "mode": "orb_fw",
+    "framework_sharpe": 3.55,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }

@@ -1,6 +1,6 @@
 {
-  "mode": "bollinger",
-  "label": "Bollinger dip",
+  "mode": "flag_fw",
+  "label": "Momentum Flag Pullback",
   "symbol": "META",
   "regime": "QUIET_RANGE",
   "test_score": 4.223968,
@@ -13,5 +13,11 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T16:41:50"
+  "updated": "2026-09-03T22:39:44",
+  "promoted": {
+    "from": "bollinger",
+    "mode": "flag_fw",
+    "framework_sharpe": 3.06,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }

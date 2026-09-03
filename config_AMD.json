@@ -1,8 +1,8 @@
 {
-  "mode": "ema_cross",
+  "mode": "flag_fw",
   "fast": 12,
   "slow": 26,
-  "label": "EMA12/26",
+  "label": "Momentum Flag Pullback",
   "symbol": "AMD",
   "regime": "QUIET_RANGE",
   "test_score": 5.990399999999999,
@@ -15,5 +15,11 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T16:41:04"
+  "updated": "2026-09-03T22:39:44",
+  "promoted": {
+    "from": "ema_cross",
+    "mode": "flag_fw",
+    "framework_sharpe": 7.01,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }

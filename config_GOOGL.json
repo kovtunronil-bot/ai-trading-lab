@@ -1,9 +1,9 @@
 {
-  "mode": "rsi",
+  "mode": "orb_fw",
   "period": 2,
   "buy_below": 5,
   "sell_above": 60,
-  "label": "RSI2 <5/60",
+  "label": "Opening Range Breakout (ORB)",
   "symbol": "GOOGL",
   "regime": "QUIET_RANGE",
   "test_score": 829.236384,
@@ -16,5 +16,11 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T16:41:05"
+  "updated": "2026-09-03T22:39:44",
+  "promoted": {
+    "from": "rsi",
+    "mode": "orb_fw",
+    "framework_sharpe": 5.39,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }

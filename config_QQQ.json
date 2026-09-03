@@ -1,6 +1,6 @@
 {
-  "mode": "rsi",
-  "label": "RSI4 <20/60",
+  "mode": "flag_fw",
+  "label": "Momentum Flag Pullback",
   "symbol": "QQQ",
   "regime": "QUIET_RANGE",
   "test_score": 15.87,
@@ -13,8 +13,14 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-03T16:41:01",
+  "updated": "2026-09-03T22:39:44",
   "period": 4,
   "buy_below": 20,
-  "sell_above": 60
+  "sell_above": 60,
+  "promoted": {
+    "from": "rsi",
+    "mode": "flag_fw",
+    "framework_sharpe": 2.52,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }

@@ -1,11 +1,11 @@
 {
-  "mode": "momentum",
-  "label": "Momentum 6m",
+  "mode": "flag_fw",
+  "label": "Momentum Flag Pullback",
   "symbol": "AMZN",
   "regime": "QUIET_RANGE",
   "test_score": 2.729088,
   "hold_test_score": -99.0,
-  "updated": "2026-09-03T16:41:56",
+  "updated": "2026-09-03T22:39:44",
   "adaptive": {
     "rsi_buy": 20,
     "rsi_sell": 55,
@@ -13,5 +13,11 @@
     "ema_slow": 18,
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
+  },
+  "promoted": {
+    "from": "momentum",
+    "mode": "flag_fw",
+    "framework_sharpe": 2.91,
+    "note": "Sharpe-driven promotion from framework backtest"
   }
 }

@@ -1,9 +1,9 @@
 {
-  "mode": "atr_breakout",
+  "mode": "orb_fw",
   "entry": 55,
   "exit": 27,
   "mult": 1.0,
-  "label": "ATRbrk 55d x1.0",
+  "label": "Opening Range Breakout (ORB)",
   "symbol": "GLD",
   "regime": "QUIET_RANGE",
   "test_score": 11.770272000000002,
@@ -16,5 +16,11 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T16:41:04"
+  "updated": "2026-09-03T22:39:44",
+  "promoted": {
+    "from": "atr_breakout",
+    "mode": "orb_fw",
+    "framework_sharpe": 4.2,
+    "note": "Sharpe-driven promotion from framework backtest"
+  }
 }
