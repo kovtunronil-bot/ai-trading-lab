@@ -43,8 +43,31 @@ def ollama_up():
         return False
 
 
+def _token_url():
+    """Build an authenticated push URL using the GitHub CLI token (if available),
+    else fall back to the plain origin URL."""
+    url = "https://github.com/kovtunronil-bot/ai-trading-lab.git"
+    gh = "C:/Program Files/GitHub CLI/gh.exe"
+    if os.path.exists(gh):
+        try:
+            tok = subprocess.run([gh, "auth", "token"], capture_output=True,
+                                 text=True, timeout=30).stdout.strip()
+            if tok and "@" not in tok and len(tok) > 10:
+                return "https://x-access-token:" + tok + "@github.com/kovtunronil-bot/ai-trading-lab.git"
+        except Exception:
+            pass
+    return url
+
+
 def git_push():
-    """Commit any DB/config changes and push to origin master (cloud reads them)."""
+    """Commit any DB/config changes and push to origin master (cloud reads them).
+
+    Handles the cloud-vs-local race: before pushing we fetch + rebase on top of
+    the remote (the cloud pushes every 30 min, so a bare push is usually
+    rejected). Conflicting data files (lab.db, config_*.json) are resolved in
+    favor of the cloud (--theirs); the local AI verdicts are the only thing the
+    night runner owns and those live in lab.db which rolls forward either way.
+    Auth is done with the GitHub CLI token (no interactive prompt)."""
     import glob
     try:
         # Expand globs in Python (Windows subprocess does not shell-expand *)
@@ -64,10 +87,39 @@ def git_push():
         subprocess.run(
             ["git", "commit", "-m", f"night runner update {ts} (local AI)"],
             check=True)
-        subprocess.run(["git", "push", "origin", "master"], check=True)
+
+        auth_url = _token_url()
+
+        # Fetch the remote without touching the working tree.
+        subprocess.run(["git", "fetch", auth_url, "master"], check=True)
+
+        # Rebase our commit(s) on top of the remote; resolve data-file conflicts
+        # in favor of the cloud (--theirs) so we never clobber cloud state.
+        rebase = subprocess.run(["git", "rebase", "FETCH_HEAD"],
+                                capture_output=True, text=True)
+        if rebase.returncode != 0:
+            print("  git: rebase conflicted, resolving data files in favor of cloud")
+            conflicted = ["lab.db"] + [f for f in files if os.path.exists(f)]
+            for f in conflicted:
+                subprocess.run(["git", "checkout", "--theirs", f],
+                               capture_output=True)
+                subprocess.run(["git", "add", f], capture_output=True)
+            subprocess.run(["git", "-c", "core.editor=true", "rebase", "--continue"],
+                           check=True)
+
+        push = subprocess.run(["git", "push", auth_url, "master:master"],
+                              capture_output=True, text=True)
+        if push.returncode != 0:
+            raise RuntimeError(push.stderr.strip()[:400])
         print("  git: pushed")
         return True
     except Exception as e:
+        # Roll back to the pre-push state so we're not left mid-rebase.
+        try:
+            if os.path.exists(os.path.join(".git", "rebase-merge")):
+                subprocess.run(["git", "rebase", "--abort"], capture_output=True)
+        except Exception:
+            pass
         print(f"  git push failed: {e}")
         return False
 
