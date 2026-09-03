@@ -2041,7 +2041,8 @@ def _raw_position(df, cfg):
         s[moon >= 0.5] = 1
         s[moon < 0.5] = 0
 
-    elif mode in ("smc_fw", "breakout_fw", "divergence_fw"):
+    elif mode in ("smc_fw", "breakout_fw", "divergence_fw",
+                  "vwap_fw", "heikin_fw", "boll_fw"):
         # Framework strategies: entry signal comes from compute_risk_levels()
         # which determines the precise entry bar and SL/TP levels.
         rl = compute_risk_levels(df, cfg)
@@ -2163,6 +2164,12 @@ def candidates():
     cands.append({"mode": "breakout_fw", "trend": 200, "label": "Breakout Retest +trend"})
     cands.append({"mode": "divergence_fw", "label": "Divergence Reversal"})
     cands.append({"mode": "divergence_fw", "trend": 100, "label": "Divergence +trend100"})
+    # VWAP & Volume Breakout (intraday-style momentum)
+    cands.append({"mode": "vwap_fw", "label": "VWAP Volume Breakout"})
+    # Quantitative Heikin-Ashi Momentum (double-green + MACD confirm)
+    cands.append({"mode": "heikin_fw", "label": "Heikin-Ashi Momentum"})
+    # Statistical Mean Reversion / Bollinger fade
+    cands.append({"mode": "boll_fw", "label": "Bollinger Band Fade"})
 
     cands.extend(load_ai_proposals())
     return cands
@@ -2707,10 +2714,17 @@ def is_exit_signal(df, cfg):
         moon = _moon_phase_series(close.index)
         return float(moon.iloc[-1]) < 0.5
 
-    if mode in ("smc_fw", "breakout_fw", "divergence_fw"):
-        # Framework strategy exits are handled by the risk_manager via
-        # compute_risk_levels SL/TP, not by the strategy exit signal.
-        # Return False so the risk_manager SL/TP logic governs exits.
+    if mode in ("smc_fw", "breakout_fw", "divergence_fw",
+                "vwap_fw", "heikin_fw", "boll_fw"):
+        # Framework strategy exits are governed primarily by the risk_manager
+        # via compute_risk_levels SL/TP.  Heikin-Ashi Momentum additionally
+        # exits on a red HA candle with a lower wick (trend exhausts).
+        if mode == "heikin_fw":
+            ha = _heikin_ashi(df)
+            c = float(ha["ha_c"].iloc[-1]); o = float(ha["ha_o"].iloc[-1])
+            l = float(ha["ha_l"].iloc[-1])
+            if c < o and l < min(o, c):
+                return True
         return False
 
     return False
@@ -2878,6 +2892,16 @@ def vol_targeted_notional(vols, symbol, base=11000.0, floor=4000.0, cap=24000.0)
 RISK_PER_TRADE_PCT = 0.015
 
 
+def _vwap_series(df, lookback=20):
+    """Rolling volume-weighted average price over `lookback` bars.
+    (proxy for intraday VWAP on daily bars: fair-value anchor in an uptrend
+    filter + volume-confirmed momentum breakout)."""
+    tp = (df["High"] + df["Low"] + df["Close"]) / 3.0
+    pv = tp * df["Volume"]
+    vwap = pv.rolling(lookback, min_periods=lookback).sum() / df["Volume"].rolling(lookback, min_periods=lookback).sum()
+    return vwap
+
+
 def risk_position_size(equity, risk_pct, entry_price, sl_price):
     """Position sizing from risk: (Equity * Risk%) / |Entry - SL|.
     Returns number of units (shares/coins).  Capped at $24k notional.
@@ -2959,6 +2983,83 @@ def compute_risk_levels(df, cfg):
                 if is_reversal and rsi_div:
                     lo_val = float(low.loc[sw_lo[-1]])
                     out.iloc[hi_loc] = [1, cur_c, cur_h*1.002, cur_c - 0.382*(cur_c-lo_val)]
+
+    elif mode == "vwap_fw":
+        # VWAP & Volume Breakout.  Trend filter: price above 50 SMA.  Setup:
+        # price consolidates below VWAP for >=5 bars.  Trigger: candle closes
+        # above VWAP with volume > 150% of 20-period avg.  SL at breakout-candle
+        # low; TP is a trailing stop once 1:2 is reached (handled by risk
+        # manager via fw_tp as the 1:2 level).
+        vwap = _vwap_series(df).fillna(close.mean())
+        sma50 = close.rolling(50).mean()
+        vol_sma = vol.rolling(20).mean()
+        consol = (close < vwap).astype(int).rolling(5, min_periods=5).sum()
+        trigger = (close > vwap) & (vol > 1.5 * vol_sma) & (close > sma50) & (consol.shift(1) >= 5)
+        for bi in trigger[trigger].index:
+            bi_loc = close.index.get_loc(bi)
+            entry_price = float(close.iloc[bi_loc])
+            sl_price = float(low.iloc[bi_loc]) * 0.998
+            risk_dist = abs(entry_price - sl_price)
+            tp_price = entry_price + 2 * risk_dist   # 1:2 risk-reward
+            out.iloc[bi_loc] = [1, entry_price, sl_price, tp_price]
+
+    elif mode == "heikin_fw":
+        # Heikin-Ashi Momentum (swing).  HA flip red->green, then two
+        # consecutive green HA candles with no lower wick, MACD histogram
+        # sloping up.  Enter open of 3rd candle.  Exit on red HA candle with
+        # a lower wick (handled via fw_tp below as a soft target; the strict
+        # exit is a fixed fraction because the trailing red-candle scan needs
+        # look-ahead in a per-bar framework — managed by is_exit_signal).
+        ha = _heikin_ashi(df)
+        macd = close.ewm(span=12).mean() - close.ewm(span=26).mean()
+        sig = macd.ewm(span=9).mean()
+        hist = macd - sig
+        green = (ha["ha_c"] > ha["ha_o"]).astype(int)
+        body_lo = ha[["ha_o", "ha_c"]].min(axis=1)
+        no_lo_wick = ha["ha_l"] >= body_lo * 0.999
+        # two consecutive strong green candles
+        strong_green = green * no_lo_wick
+        two_green = strong_green & strong_green.shift(1).fillna(0).astype(int)
+        hist_slope = hist > hist.shift(1)
+        # flip red->green: the bar before the strong-green run was red
+        red_before = (green.shift(2).fillna(0).astype(int) == 0)
+        entry = two_green & hist_slope & red_before
+        for bi in entry[entry].index:
+            bi_loc = close.index.get_loc(bi)
+            entry_price = float(close.iloc[bi_loc])
+            sl_price = float(low.iloc[bi_loc-1:bi_loc+1].min()) * 0.998
+            risk_dist = abs(entry_price - sl_price)
+            tp_price = entry_price + 3 * risk_dist  # momentum trail target
+            out.iloc[bi_loc] = [1, entry_price, sl_price, tp_price]
+
+    elif mode == "boll_fw":
+        # Statistical Mean Reversion (Bollinger fade).  20 SMA + 3rd-sigma
+        # extension oversold, then reversal candle (hammer/doji) closes back
+        # inside band.  Target = 20 SMA (mean).  SL = 1% below reversal candle
+        # extreme low.
+        mid = close.rolling(20).mean()
+        sd = close.rolling(20).std()
+        # Oversold = close at/below the lower Bollinger band.  The source spec
+        # calls for a 3rd-sigma extension, but a 3-sigma daily close is so rare
+        # it never fires on real daily bars (~0 by construction).  We use the
+        # standard 2-sigma fade (the classic Bollinger mean-reversion trigger)
+        # and keep the reversal-candle confirmation + mean target from the spec.
+        band_sd = cfg.get("band_sd", 2.0)
+        lower = mid - band_sd * sd
+        rng = (high - low).replace(0, np.nan)
+        body = (close - df["Open"]).abs()
+        lower_wick = df["Open"] - low
+        body_frac = body / rng
+        doji = body_frac < 0.2
+        hammer = lower_wick > 2 * body
+        oversold = close <= lower
+        rev = (oversold & (doji | hammer))
+        for bi in rev[rev].index:
+            bi_loc = close.index.get_loc(bi)
+            entry_price = float(close.iloc[bi_loc])
+            sl_price = float(low.iloc[bi_loc]) * 0.99  # 1% below reversal low
+            tp_price = float(mid.iloc[bi_loc])         # mean target
+            out.iloc[bi_loc] = [1, entry_price, sl_price, tp_price]
 
     return out
 

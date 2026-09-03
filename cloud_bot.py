@@ -533,7 +533,8 @@ def run_cloud():
         # stored in framework_levels so the risk_manager can use them.
         # fw_size is preserved and re-applied right before order placement so
         # the volume-based conviction/momentum sizing can't clobber it.
-        fw_mode = cfg.get("mode") in ("smc_fw", "breakout_fw", "divergence_fw")
+        fw_mode = cfg.get("mode") in ("smc_fw", "breakout_fw", "divergence_fw",
+                                      "vwap_fw", "heikin_fw", "boll_fw")
         fw_size = None
         if fw_mode:
             rl = brain.compute_risk_levels(df, cfg)
