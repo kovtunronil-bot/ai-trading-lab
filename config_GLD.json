@@ -7,7 +7,7 @@
   "symbol": "GLD",
   "regime": "QUIET_RANGE",
   "test_score": 11.770272000000002,
-  "hold_test_score": -3.374,
+  "hold_test_score": -3.69,
   "adaptive": {
     "rsi_buy": 24,
     "rsi_sell": 60,
@@ -16,5 +16,5 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T15:15:13"
+  "updated": "2026-09-03T16:41:04"
 }

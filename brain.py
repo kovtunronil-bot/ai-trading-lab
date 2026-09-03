@@ -494,10 +494,12 @@ def monte_carlo_drawdown(simulations=2000, trades_per_sim=60, seed=42):
     p95_dd = worst_list[int(len(worst_list) * 0.95) - 1]
     # If the projected 95th-percentile worst-case drawdown approaches our
     # HALT (-10%) / LOCKDOWN (-20%) levels, scale sizes down to keep risk
-    # inside the envelope. p95 of -7% or worse => tighten.
+    # inside the envelope. p95 of -10% or worse => tighten (raised from -7%
+    # so the advisor allows fuller capital deployment while still protecting
+    # the account before the HALT circuit breaker trips).
     risk_mult = 1.0
-    if p95_dd < -7.0:
-        risk_mult = max(0.4, min(1.0, -5.0 / (p95_dd if p95_dd < 0 else -5.0)))
+    if p95_dd < -10.0:
+        risk_mult = max(0.4, min(1.0, -7.0 / (p95_dd if p95_dd < 0 else -7.0)))
     return {"median_dd": round(median_dd, 2), "p95_dd": round(p95_dd, 2),
             "risk_mult": round(risk_mult, 3), "samples": len(clean)}
 
@@ -2384,7 +2386,7 @@ def realized_vol(close):
     return float(v) if pd.notna(v) and v > 0 else None
 
 
-def vol_targeted_notional(vols, symbol, base=8500.0, floor=3000.0, cap=15000.0):
+def vol_targeted_notional(vols, symbol, base=11000.0, floor=4000.0, cap=24000.0):
     target = vols.get(symbol)
     med = float(pd.Series([v for v in vols.values() if v]).median()) if any(vols.values()) else None
     if not target or not med:

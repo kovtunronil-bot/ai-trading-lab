@@ -5,7 +5,7 @@
   "label": "EMA20/50",
   "symbol": "SPY",
   "regime": "QUIET_RANGE",
-  "test_score": 1.851816,
+  "test_score": 1.8056640000000002,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,
@@ -15,5 +15,5 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-03T15:15:26"
+  "updated": "2026-09-03T16:41:22"
 }
