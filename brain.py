@@ -2079,6 +2079,120 @@ def _strat_rets(df, cfg):
     return position_for(df, cfg, shift=True) * rets
 
 
+def backtest_report(df, cfg, risk_pct=None, rf=0.0):
+    """Honest, sharpe-aware backtest report for a strategy on one symbol.
+
+    For framework strategies (mode ends in '_fw') it runs a trade-by-trade
+    walk-forward simulation that enforces the strategy's own SL/TP levels
+    (no lookahead: checks the bar AFTER the entry signal).  For all others it
+    uses the position/equity-curve method.
+
+    Returns a dict of metrics and prints a readable report.  Sharpe uses the
+    classic (Rp - Rf)/sigma_p on annualized daily returns.
+    """
+    if risk_pct is None:
+        risk_pct = RISK_PER_TRADE_PCT
+    mode = cfg.get("mode", "")
+    close = df["Close"]
+    n = len(df)
+    tr = {}
+
+    if mode.endswith("_fw"):
+        # ---- trade-by-trade SL/TP walk-forward ----
+        rl = compute_risk_levels(df, cfg)
+        sigs = rl[rl["signal"] == 1]
+        trades = []
+        for bar in sigs.index:
+            loc = df.index.get_loc(bar)
+            ep = float(rl["entry"].loc[bar])
+            sl = float(rl["sl"].loc[bar])
+            tp = float(rl["tp"].loc[bar])
+            if ep <= 0 or sl <= 0 or tp <= 0 or (tp - sl) <= 0:
+                continue
+            r = (tp - ep) / (ep - sl) if (ep - sl) != 0 else 0.0
+            body = max(ep, 1e-9)
+            out = None; exit_px = None
+            for j in range(loc + 1, min(loc + 60, n)):
+                lo = float(df["Low"].iloc[j]); hi = float(df["High"].iloc[j])
+                if lo <= sl:
+                    out = -r; exit_px = sl; break
+                if hi >= tp:
+                    out = r; exit_px = tp; break
+            if out is None:
+                out = float(close.iloc[min(loc + 60, n - 1)]) / body - 1
+                exit_px = float(close.iloc[min(loc + 60, n - 1)])
+            trades.append({"r": out, "win": out > 0})
+        wins = [t for t in trades if t["win"]]
+        n_tr = len(trades)
+        win_rate = len(wins) / n_tr if n_tr else 0.0
+        rs = [t["r"] for t in trades]
+        expectancy = sum(rs) / n_tr if n_tr else 0.0
+        tr = {
+            "trades": n_tr, "win_rate": win_rate, "expectancy_r": expectancy,
+            "total_r": sum(rs), "avg_win_r": (sum(x for x in rs if x > 0) /
+                                              len([x for x in rs if x > 0])
+                                              if any(x > 0 for x in rs) else 0.0),
+            "avg_loss_r": (sum(x for x in rs if x < 0) /
+                           len([x for x in rs if x < 0])
+                           if any(x < 0 for x in rs) else 0.0),
+        }
+        # equity proxy from compounding the risk-based R returns
+        if n_tr:
+            eq = float(CAPITAL)
+            eqs = [eq]
+            for t in trades:
+                eq = eq * (1 + t["r"] * risk_pct)
+                eqs.append(eq)
+            eqs = pd.Series(eqs, index=df.index[: len(eqs)])
+        else:
+            eqs = pd.Series(CAPITAL, index=df.index)
+        strat_rets = eqs.pct_change().fillna(0)
+        equity = eqs
+    else:
+        # ---- equity-curve method ----
+        equity = equity_curve(df, cfg)
+        strat_rets = _strat_rets(df, cfg)
+        tr = {"trades": int((strat_rets != 0).sum()), "win_rate": None,
+              "expectancy_r": None, "total_r": None, "avg_win_r": None,
+              "avg_loss_r": None}
+
+    sr = sharpe_like(strat_rets)
+    so = sortino(strat_rets)
+    pf = profit_factor(strat_rets)
+    mdd, dd_days = max_dd_stats(equity)
+    cagr = ((float(equity.iloc[-1]) / CAPITAL) ** (1 / max(years(equity.index), 1e-9))) - 1
+    vol_ann = float(strat_rets.std()) * np.sqrt(252)
+    total_ret = float(equity.iloc[-1]) / CAPITAL - 1
+    calmar = cagr / abs(mdd) if mdd else 0.0
+
+    report = {
+        "symbol": cfg.get("symbol", "?"), "label": cfg.get("label", mode),
+        "mode": mode, "sharpe": sr, "sortino": so, "profit_factor": pf,
+        "max_dd": mdd, "dd_days": dd_days, "cagr": cagr, "vol_ann": vol_ann,
+        "total_return": total_ret, "calmar": calmar, "final_equity": float(equity.iloc[-1]),
+        "strategy": tr,
+    }
+    return report
+
+
+def print_backtest_report(report):
+    print(f"\n=== Backtest Report: {report['label']} ({report['mode']}) ===")
+    print(f"Total return: {report['total_return']*100:+.2f}%  "
+          f"Final equity: ${report['final_equity']:,.2f}  CAGR: {report['cagr']*100:+.1f}%")
+    print(f"Sharpe: {report['sharpe']:.2f}   Sortino: {report['sortino']:.2f}   "
+          f"Profit factor: {report['profit_factor']:.2f}   Calmar: {report['calmar']:.2f}")
+    print(f"Vol (ann): {report['vol_ann']*100:.1f}%   Max DD: {report['max_dd']*100:.1f}% "
+          f"({report['dd_days']} days)")
+    st = report["strategy"]
+    if st.get("expectancy_r") is not None:
+        print(f"Trades: {st['trades']}   WinRate: {st['win_rate']*100:.0f}%   "
+              f"Expectancy: {st['expectancy_r']:+.2f}R   Total R: {st['total_r']:+.2f}")
+        print(f"Avg win: {st['avg_win_r']:+.2f}R   Avg loss: {st['avg_loss_r']:+.2f}R")
+    else:
+        print(f"Trades (bars in market): {st['trades']}")
+    return report
+
+
 def candidates():
     cands = [{"mode": "hold", "label": "BUY&HOLD"}]
     for e in [10, 15, 20, 30, 40, 55]:
