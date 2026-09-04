@@ -1,12 +1,9 @@
 {
-  "mode": "flag_fw",
-  "entry": 20,
-  "exit": 10,
-  "mult": 0.5,
-  "label": "Momentum Flag Pullback",
+  "mode": "orb_fw",
+  "label": "Opening Range Breakout (ORB)",
   "symbol": "NFLX",
   "regime": "QUIET_RANGE",
-  "test_score": 22.380456000000002,
+  "test_score": 197.080704,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 24,
@@ -16,11 +13,5 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T22:39:44",
-  "promoted": {
-    "from": "atr_breakout",
-    "mode": "flag_fw",
-    "framework_sharpe": 3.61,
-    "note": "Sharpe-driven promotion from framework backtest"
-  }
+  "updated": "2026-09-04T23:22:55"
 }

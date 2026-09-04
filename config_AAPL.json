@@ -1,12 +1,9 @@
 {
-  "mode": "flag_fw",
-  "entry": 55,
-  "exit": 27,
-  "mult": 1.0,
-  "label": "Momentum Flag Pullback",
+  "mode": "heikin",
+  "label": "Heikin-Ashi trend",
   "symbol": "AAPL",
   "regime": "QUIET_RANGE",
-  "test_score": 3.5453200000000002,
+  "test_score": 4.26572,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,
@@ -16,11 +13,5 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-03T22:39:44",
-  "promoted": {
-    "from": "atr_breakout",
-    "mode": "flag_fw",
-    "framework_sharpe": 2.47,
-    "note": "Sharpe-driven promotion from framework backtest"
-  }
+  "updated": "2026-09-04T23:23:07"
 }

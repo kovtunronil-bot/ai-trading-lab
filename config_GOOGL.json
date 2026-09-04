@@ -7,7 +7,7 @@
   "symbol": "GOOGL",
   "regime": "QUIET_RANGE",
   "test_score": 829.236384,
-  "hold_test_score": -1.727,
+  "hold_test_score": -2.118,
   "adaptive": {
     "rsi_buy": 24,
     "rsi_sell": 60,
@@ -16,7 +16,7 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T22:39:44",
+  "updated": "2026-09-04T23:22:52",
   "promoted": {
     "from": "rsi",
     "mode": "orb_fw",

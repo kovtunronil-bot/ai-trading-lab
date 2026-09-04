@@ -1,12 +1,10 @@
 {
-  "mode": "flag_fw",
-  "fast": 12,
-  "slow": 26,
-  "label": "Momentum Flag Pullback",
+  "mode": "boll_fw",
+  "label": "Bollinger Band Fade",
   "symbol": "AMD",
   "regime": "QUIET_RANGE",
-  "test_score": 5.990399999999999,
-  "hold_test_score": 9.233,
+  "test_score": 6.5862,
+  "hold_test_score": 10.977,
   "adaptive": {
     "rsi_buy": 24,
     "rsi_sell": 60,
@@ -15,11 +13,5 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-03T22:39:44",
-  "promoted": {
-    "from": "ema_cross",
-    "mode": "flag_fw",
-    "framework_sharpe": 7.01,
-    "note": "Sharpe-driven promotion from framework backtest"
-  }
+  "updated": "2026-09-04T23:22:50"
 }
