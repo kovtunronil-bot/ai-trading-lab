@@ -588,18 +588,24 @@ def run_cloud():
                 framework_levels.pop(symbol, None)
                 print(f">>> FRAMEWORK {symbol}: no signal this bar")
 
-        if recent_mom < -0.03:
-            sized_notional *= 0.5
-        elif recent_mom > 0.05:
-            sized_notional *= 1.1
+        if not fw_mode:
+            if recent_mom < -0.03:
+                sized_notional *= 0.5
+            elif recent_mom > 0.05:
+                sized_notional *= 1.1
 
         action, detail = "WAIT", ""
+        # Framework configs must enter ONLY on a live framework signal
+        # (fw_size set). current_state() has no _fw branch, so want_in would
+        # fall back to the momentum strategy — a momentum buy under a
+        # framework config was trading the wrong (unmeasured) strategy.
+        fw_ready = fw_mode and fw_size is not None
         try:
-            if want_in and holding is None and allow_entries:
+            if (fw_ready or (not fw_mode and want_in)) and holding is None and allow_entries:
                 if brain.strategy_is_failing(symbol):
                     action, detail = "FAILING-STRATEGY-BLOCKED", "trained loser — skip entry"
                     print(f"  {symbol}: blocked — strategy {cfg.get('label')} has proven losing odds")
-                elif recent_mom < -0.03:
+                elif not fw_mode and recent_mom < -0.03:
                     action, detail = "MOMENTUM-BLOCKED", f"price dropped {recent_mom*100:+.1f}%"
                 else:
                     # Entry-quality gates: fundamental health, volume, liquidity.
