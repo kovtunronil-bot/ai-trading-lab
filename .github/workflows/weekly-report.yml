@@ -1,0 +1,46 @@
+name: Weekly Report
+
+on:
+  schedule:
+    - cron: '0 6 * * 0'          # Every Sunday 06:00 UTC
+  workflow_dispatch:             # Manual trigger button
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Set up Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Run weekly report
+      run: python weekly_report.py | tee weekly_report_output.txt
+
+    - name: Upload report as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: weekly-report
+        path: weekly_report_output.txt
+
+    - name: Commit report snapshot (optional trace in repo)
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        mkdir -p _reports
+        cp weekly_report_output.txt _reports/weekly_$(date -u +%Y-%m-%d).txt
+        git config user.name "Trading Robot"
+        git config user.email "robot@bot.local"
+        git add _reports/
+        git diff --cached --quiet && exit 0
+        git commit -m "weekly report $(date -u +%Y-%m-%d)"
+        git push origin HEAD:master
