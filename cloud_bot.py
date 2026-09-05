@@ -124,7 +124,11 @@ def run_cloud():
     # in the current regime. Only stale symbols run, so this stays light, and
     # each symbol re-evolves roughly once a day.
     try:
-        stale = [s for s in brain.ALL if brain.config_is_stale(brain.load_config(s))]
+        stale = []
+        for s in brain.ALL:
+            _cfg = brain.load_config(s)
+            if _cfg and brain.config_is_stale(_cfg) and str(_cfg.get("mode", "")).endswith("_fw"):
+                stale.append(s)
         if stale:
             print(f"[SELF-LEARN] re-evolving {len(stale)} stale markets: {stale}")
             brain.evolve_all(stale, force_print=False)
@@ -624,8 +628,15 @@ def run_cloud():
                         size_mult = 1.0
                         hc = brain.dynamic_heat_cap(live_regime, drawdown)
                         if deployed + sized_notional > hc * equity:
-                            size_mult = min(size_mult, max(0.0, ((hc * equity) - deployed) / max(sized_notional, 1)))
-                            print(f">>> HEAT: sizing down {size_mult:.0%} to respect {hc*100:.0f}% cap ({live_regime})")
+                            _heat_room = (hc * equity) - deployed
+                            if _heat_room <= equity * 0.005:
+                                # Heat budget fully consumed: entering even the
+                                # $200 floor would bust the portfolio heat cap.
+                                action, detail = "HEAT-BLOCKED", f"{hc*100:.0f}% cap consumed"
+                                print(f">>> HEAT-BLOCKED {symbol}: no room under {hc*100:.0f}% cap ({live_regime})")
+                            else:
+                                size_mult = min(size_mult, max(0.0, _heat_room / max(sized_notional, 1)))
+                                print(f">>> HEAT: sizing down {size_mult:.0%} to respect {hc*100:.0f}% cap ({live_regime})")
                         if conviction < brain.FREE_SAIL_CONVICTION:
                             if conviction < brain.MIN_CONVICTION:
                                 action, detail = "LOW-CONVICTION", f"{conviction:.0%} < {brain.MIN_CONVICTION:.0%}"

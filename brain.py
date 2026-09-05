@@ -2422,6 +2422,12 @@ def evolve_symbol(symbol, force_print=True, df=None):
 
     scored = []
     for c in candidates():
+        # Auto-evolution stays inside the measured framework family: legacy
+        # strategies (momentum/rsi/bollinger/...) produced the historical deep
+        # losers and must not be resurrected by a daily re-tune. Non-framework
+        # configs (e.g. ETH atr_breakout) are frozen — changed only by hand.
+        if not str(c.get("mode", "")).endswith("_fw"):
+            continue
         tr_rets = _strat_rets(train_df, c)
         scored.append((sharpe_like(tr_rets), c))
     scored.sort(key=lambda x: x[0], reverse=True)
