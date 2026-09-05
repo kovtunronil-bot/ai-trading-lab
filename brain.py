@@ -2958,6 +2958,21 @@ def save_state(state):
         json.dump(state, f, indent=2)
 
 
+def mark_framework_first_open(symbol, label):
+    """Fire a one-time milestone alert when the FIRST framework position
+    opens live on paper. Persists in state.json so it can never re-fire."""
+    try:
+        st = load_state()
+        if st.get("framework_first_open"):
+            return False
+        st["framework_first_open"] = True
+        save_state(st)
+        send_alert(f"FRAMEWORK-LIVE | first framework position opened: {symbol} ({label})")
+        return True
+    except Exception:
+        return False
+
+
 def daily_kill_switch(equity, threshold=0.025):
     """Max daily loss kill-switch (guide, Part 4).
 

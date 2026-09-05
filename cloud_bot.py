@@ -686,6 +686,8 @@ def run_cloud():
                         oid, st, fill_price = smart_buy(symbol, sized_notional, price)
                         if st == "filled" and fill_price:
                             brain.set_position_strategy(symbol, cfg.get("label", "?"))
+                            if fw_mode and fw_size is not None:
+                                brain.mark_framework_first_open(symbol, cfg.get("label", "?"))
                             # Save framework SL/TP to config so risk_manager can use them.
                             if symbol in framework_levels:
                                 _fl = framework_levels[symbol]
