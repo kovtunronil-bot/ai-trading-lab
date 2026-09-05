@@ -8,6 +8,18 @@ Promotion rule (same bar used for previous promotions):
   - drawdown not worse than -25%
   - at least 8 trades in the backtest
   - alternative still positive on 2y (recent regime sanity check)
+
+When PROMOTE=1 is set (strategy-scan.yml cron), a winner that clears an even
+stricter gate is written back into its live config automatically:
+  - the 4y beat bar above,
+  - a third independent 3y window must also be positive (sharpe>0, DD>=-25%,
+    n>=8),
+  - the current config must already be a framework (_fw) strategy (frozen
+    legacy/manual configs like ETH atr_breakout are never auto-touched),
+  - only the measured fields change (mode, entry, label, test_score, updated);
+    every other config field is left untouched.
+The promotion is announced on ntfy exactly like the bot announces trades, so
+every auto-change stays visible and auditable.
 """
 import warnings
 warnings.filterwarnings("ignore")
@@ -16,6 +28,7 @@ import glob
 import json
 import os
 import sys
+from datetime import datetime, timezone
 
 import yfinance as yf
 
@@ -55,8 +68,48 @@ def _metrics(cfg, period):
         return None
 
 
+def _promote_cfg(path, cfg, cand, cur, sym):
+    """Strict-gate auto-promotion. Returns True if the config was written."""
+    mode, e, m4, m2 = cand
+    cur_mode = cfg.get("mode", "")
+    if not str(cur_mode).endswith("_fw"):
+        return False  # frozen legacy/manual config: human-only
+    if m4["sharpe"] <= cur["sharpe"] * BEAT_BY:
+        return False
+    m3 = _metrics({"symbol": sym, "mode": mode, "entry": e}, "3y")
+    if not m3 or m3["sharpe"] <= 0.0 or m3["dd"] < DD_FLOOR or m3["trades"] < MIN_TRADES:
+        return False
+    old = {
+        "mode": cur_mode,
+        "sharpe": round(cur["sharpe"], 2),
+        "dd": round(cur["dd"], 1),
+    }
+    cfg["mode"] = mode
+    cfg["entry"] = e
+    cfg["label"] = f"{mode} (auto-promotion)"
+    cfg["test_score"] = round(m4["sharpe"], 2)
+    cfg["promoted"] = {
+        "from": cur_mode,
+        "from_sharpe": old["sharpe"],
+        "framework_sharpe": round(m4["sharpe"], 2),
+        "dd": round(m4["dd"], 1),
+        "sharpe_2y": round(m2["sharpe"], 2),
+        "sharpe_3y": round(m3["sharpe"], 2),
+        "updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "note": "auto-promotion: 4y/3y/2y validation + Sharpe>1.05x bar",
+    }
+    cfg["updated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2)
+        fh.write("\n")
+    print(f"    PROMOTE-> wrote {path} ({cur_mode} -> {mode}, S {old['sharpe']} -> {m4['sharpe']:.2f})", flush=True)
+    return True
+
+
 def main():
+    promote = os.environ.get("PROMOTE", "0") == "1"
     out = []
+    promoted = []
     for f in sorted(glob.glob("config_*.json")):
         cfg = json.load(open(f, encoding="utf-8"))
         sym = cfg.get("symbol")
@@ -87,6 +140,8 @@ def main():
                 f"  -> UPGRADE {mode} e={e}: S4y={m4['sharpe']:+.2f} "
                 f"DD4y={m4['dd']:+.1f}% S2y={m2['sharpe']:+.2f} n={m4['trades']}"
             )
+            if promote and _promote_cfg(f, cfg, candidates[0], cur, sym):
+                promoted.append(line)
         elif candidates:
             mode, e, m4, m2 = candidates[0]
             line += f"  (best alt {mode} e={e}: S4y={m4['sharpe']:+.2f} DD4y={m4['dd']:+.1f}% — below bar)"
@@ -95,8 +150,10 @@ def main():
         print(line, flush=True)
         out.append(line)
     upgrades = [l for l in out if "-> UPGRADE" in l]
-    if upgrades:
-        msg = "STRATEGY-SCAN | upgrades found:\n" + "\n".join(upgrades)
+    if promoted:
+        msg = "STRATEGY-SCAN | AUTO-PROMOTIONS applied:\n" + "\n".join(promoted)
+    elif upgrades:
+        msg = "STRATEGY-SCAN | upgrades found (auto-gate: 3y not met, alert only):\n" + "\n".join(upgrades)
     else:
         msg = "STRATEGY-SCAN | no upgrades (current lineup holds the bar)"
     brain.send_alert(msg)
