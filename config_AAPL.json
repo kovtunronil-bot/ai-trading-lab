@@ -1,9 +1,10 @@
 {
-  "mode": "heikin",
-  "label": "Heikin-Ashi trend",
+  "mode": "flag_fw",
+  "label": "Flag Pattern Fade (Flag FW)",
   "symbol": "AAPL",
   "regime": "QUIET_RANGE",
-  "test_score": 4.26572,
+  "entry": 30,
+  "test_score": 2.69,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,

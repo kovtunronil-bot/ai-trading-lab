@@ -1,0 +1,30 @@
+name: Strategy Scan
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      NTFY_TOPIC: robot-mx7-bluefalcon-tv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install --quiet yfinance pandas numpy
+      - name: Run strategy scan
+        run: python strategy_scan.py | tee strategy_scan_output.txt
+      - name: Upload scan report
+        uses: actions/upload-artifact@v4
+        with:
+          name: strategy-scan-output
+          path: strategy_scan_output.txt
+          retention-days: 14
