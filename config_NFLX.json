@@ -1,6 +1,6 @@
 {
-  "mode": "orb_fw",
-  "label": "Opening Range Breakout (ORB)",
+  "mode": "flag_fw",
+  "label": "Flag Pattern Fade (Flag FW)",
   "symbol": "NFLX",
   "regime": "QUIET_RANGE",
   "test_score": 197.080704,
@@ -13,5 +13,5 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-04T23:22:55"
+  "updated": "2026-09-05T11:50:56"
 }

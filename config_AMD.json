@@ -1,6 +1,6 @@
 {
-  "mode": "boll_fw",
-  "label": "Bollinger Band Fade",
+  "mode": "flag_fw",
+  "label": "Flag Pattern Fade (Flag FW)",
   "symbol": "AMD",
   "regime": "QUIET_RANGE",
   "test_score": 6.5862,
@@ -13,5 +13,5 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-04T23:22:50"
+  "updated": "2026-09-05T11:39:51"
 }
