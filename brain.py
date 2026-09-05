@@ -8,7 +8,8 @@ import pandas as pd
 import yfinance as yf
 
 SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "GLD",
-           "AMD", "META", "GOOGL", "AMZN", "NFLX"]
+           "AMD", "META", "GOOGL", "AMZN", "NFLX",
+           "CAT", "BAC", "COP", "JNJ", "KO", "SLV"]
 CRYPTO = {"BTC/USD": "BTC-USD", "ETH/USD": "ETH-USD"}
 
 
@@ -55,10 +56,15 @@ FLAT_THRESHOLD = 0.005
 FLAT_MAX_DAYS = 15
 SECTOR_CAP = 0.40
 SECTORS = {
-    "tech": ["NVDA", "AMD", "MSFT", "GOOGL", "META", "AMZN", "NFLX", "AAPL"],
+    "tech": ["NVDA", "AMD", "MSFT", "GOOGL", "META", "AMZN", "NFLX", "AAPL", "TSLA"],
     "broad": ["SPY", "QQQ"],
-    "commodity": ["GLD"],
+    "commodity": ["GLD", "SLV"],
     "crypto": ["BTC/USD", "ETH/USD"],
+    "financials": ["BAC"],
+    "industrials": ["CAT"],
+    "energy": ["COP"],
+    "staples": ["KO"],
+    "healthcare": ["JNJ"],
 }
 
 

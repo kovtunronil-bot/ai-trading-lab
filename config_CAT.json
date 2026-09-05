@@ -1,0 +1,18 @@
+{
+  "mode": "flag_fw",
+  "label": "Caterpillar (CAT Flag FW)",
+  "symbol": "CAT",
+  "regime": "QUIET_RANGE",
+  "entry": 30,
+  "test_score": 8.81,
+  "hold_test_score": -99.0,
+  "adaptive": {
+    "rsi_buy": 20,
+    "rsi_sell": 55,
+    "ema_fast": 7,
+    "ema_slow": 18,
+    "atr_mult": 0.75,
+    "note": "low-vol: tighter thresholds"
+  },
+  "updated": "2026-09-05T14:05:00"
+}
