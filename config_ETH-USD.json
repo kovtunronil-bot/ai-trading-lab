@@ -1,12 +1,10 @@
 {
-  "mode": "atr_breakout",
-  "entry": 55,
-  "exit": 27,
-  "mult": 1.0,
-  "label": "ATRbrk 55d x1.0",
+  "mode": "flag_fw",
+  "label": "Flag Pattern Fade (Flag FW)",
   "symbol": "ETH/USD",
   "regime": "QUIET_RANGE",
-  "test_score": 83.626976,
+  "entry": 30,
+  "test_score": 0.92,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 24,
@@ -16,5 +14,14 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-04T19:10:23"
+  "promoted": {
+    "from": "atr_breakout",
+    "mode": "flag_fw",
+    "framework_sharpe": 0.92,
+    "dd_percent": -19.6,
+    "sharpe_3y": 1.26,
+    "sharpe_2y": -0.84,
+    "note": "manual: legacy atr_breakout (S0.57, DD-40%) had no validation in 5 windows; flag_fw halves DD, framework-gated entries/SL/TP. 2y NEGATIVE (recent era) - honest risk, monitored."
+  },
+  "updated": "2026-09-05T14:40:00"
 }
