@@ -126,6 +126,20 @@ def load_live_scores():
         return []
 
 
+def load_sector_exposure():
+    rev = {}
+    for sec, syms in brain.SECTORS.items():
+        for s in syms:
+            rev[s] = sec
+    counts = {}
+    for s in brain.ALL:
+        sec = rev.get(s, "other")
+        counts.setdefault(sec, []).append(s)
+    total = len(brain.ALL) or 1
+    rows = sorted(counts.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+    return rows, total
+
+
 def load_readiness():
     try:
         return brain.readiness_score()
@@ -145,6 +159,13 @@ def build_html():
     live_scores = load_live_scores()
     ready = load_readiness()
     ready_emoji = "🟢" if ready["score"] >= 80 else ("🟡" if ready["score"] >= 50 else "🔒")
+    sector, sector_total = load_sector_exposure()
+    tech_count = len(dict(sector).get("tech", []))
+    tech_pct = tech_count / sector_total * 100 if sector_total else 0.0
+    sector_rows = "".join(
+        "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+            sec, ", ".join(syms), len(syms), f"{len(syms)/sector_total*100:.0f}%")
+        for sec, syms in sector)
 
     if eq.empty:
         equity_val = peak_val = dd = 100000.0, 100000.0, 0.0
@@ -224,6 +245,9 @@ li {{ margin:4px 0; color:#cbd5e1; }}
 {score_rows}</table>
 <h2>Champion strategies (per market)</h2>
 <table><tr><th>Market</th><th>Strategy</th><th>Test score</th><th>Checked</th></tr>{champ_rows}</table>
+<h2>Sector concentration <span class="small">(SECTOR_CAP {brain.SECTOR_CAP*100:.0f}%)</span></h2>
+<table><tr><th>Sector</th><th>Markets</th><th>Count</th><th>Share</th></tr>{sector_rows}</table>
+<p class="small">tech share {tech_pct:.0f}% of {sector_total} markets in universe (SECTOR_CAP {brain.SECTOR_CAP*100:.0f}% applies to deployed capital, enforced live)</p>
 <h2>Recent activity (journal)</h2><table>{journal_rows}</table>
 <h2>Evolution diary (latest)</h2><ul>{lesson_rows}</ul>
 </body></html>"""
