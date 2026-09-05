@@ -216,9 +216,11 @@ def run_cloud():
         # at entry time) instead of the generic 8% stop.  This respects the
         # strategy's own risk framework (SL at sweep extreme, retest low, etc.).
         fw_sl = None
+        fw_tp = None
         try:
             _cfg = brain.load_config(internal)
             fw_sl = _cfg.get("fw_sl") if _cfg else None
+            fw_tp = _cfg.get("fw_tp") if _cfg else None
             if fw_sl and float(fw_sl) > 0:
                 stop_fraction = max(1 - float(fw_sl) / entry, 0.02)  # min 2%
                 # Cap framework stop width at the generic 8% stop. Framework
@@ -235,6 +237,16 @@ def run_cloud():
                 continue
             _close_and_learn(p, f"STOPLOSS{'[FAILING]' if failing else ''}", cur)
         else:
+            # 1b) framework take-profit: mirrors the SL/TP walk-forward the
+            #     measured edge came from (a trade that reaches the strategy
+            #     TP exits there, locking the win). Without this, live trades
+            #     ride past TP and give back profit the backtest assumed banked.
+            if fw_tp and float(fw_tp) > 0 and cur >= float(fw_tp):
+                if internal not in brain.CRYPTO and not market_open:
+                    print(f"  {p.symbol} TP-HIT but market closed — next open run")
+                    continue
+                _close_and_learn(p, "TP-HIT", cur)
+                continue
             # 2) profit-lock / trailing stop on winners
             pos_peak = brain.update_position_peak(internal, cur, entry)
             _live_reg = brain.current_regime(all_data.get(internal, pd.DataFrame()))
