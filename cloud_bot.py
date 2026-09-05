@@ -221,6 +221,11 @@ def run_cloud():
             fw_sl = _cfg.get("fw_sl") if _cfg else None
             if fw_sl and float(fw_sl) > 0:
                 stop_fraction = max(1 - float(fw_sl) / entry, 0.02)  # min 2%
+                # Cap framework stop width at the generic 8% stop. Framework
+                # SLs measured at 11-20% are risk-unbalanced: with 1.5% per
+                # trade risk they force either oversized bets or oversized
+                # losses. Capping keeps every losing trade bounded.
+                stop_fraction = min(stop_fraction, brain.POSITION_STOP_LOSS)
         except Exception:
             pass
         # 1) hard stop-loss (adaptive to strategy quality)
