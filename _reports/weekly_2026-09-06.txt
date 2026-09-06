@@ -1,0 +1,26 @@
+=== AI TRADING ROBOT — WEEKLY HONEST REPORT ===
+generated: 2026-09-06 09:55:59 
+
+[1] EQUITY      $97,483.65
+    PEAK        $100,000.00
+    DRAWDOWN    -2.5%
+
+[2] CLOSED TRADES  259   cum P&L +786.93%
+    per strategy:
+      ATRbrk 55d x1.0            n=  14  avg=+22.61%  sum=+316.58%
+      Stoch14 <20/>80            n=  39  avg=+3.68%  sum=+143.38%
+      RSI2 <5/60                 n=  37  avg=+1.81%  sum=+66.86%
+      Momentum 6m                n=  55  avg=+1.21%  sum=+66.52%
+      ADX>20 trend-on            n=  30  avg=+2.21%  sum=+66.27%
+      Bollinger dip              n=  18  avg=+2.28%  sum=+41.09%
+      RSI4 <20/60                n=  28  avg=+1.38%  sum=+38.58%
+      EMA9/21                    n=  22  avg=+1.44%  sum=+31.66%
+      ATRbrk 30d x0.5            n=  12  avg=+2.17%  sum=+26.08%
+      RSI14 <25/55               n=   4  avg=-2.53%  sum=-10.10%   <-- losing
+
+[3] INTEGRITY  compile: OK
+    configs loaded: 20/20
+
+[4] READINESS  75.0/100
+
+[5] FRAMEWORK      no framework closed trades yet — waiting for first exits
