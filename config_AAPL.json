@@ -1,9 +1,9 @@
 {
-  "mode": "vwap_rev_fw",
-  "label": "VWAP Reversion",
+  "mode": "flag_fw",
+  "label": "flag_fw (auto-promotion)",
   "symbol": "AAPL",
   "regime": "QUIET_RANGE",
-  "test_score": 3.468576,
+  "test_score": 2.69,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,
@@ -13,5 +13,16 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-06T01:21:57"
+  "updated": "2026-09-06T09:09:36+00:00",
+  "entry": 30,
+  "promoted": {
+    "from": "vwap_rev_fw",
+    "from_sharpe": -7.47,
+    "framework_sharpe": 2.69,
+    "dd": -10.8,
+    "sharpe_2y": 2.21,
+    "sharpe_3y": 1.53,
+    "updated": "2026-09-06T09:09:36+00:00",
+    "note": "auto-promotion: 4y/3y/2y validation + Sharpe>1.05x bar"
+  }
 }
