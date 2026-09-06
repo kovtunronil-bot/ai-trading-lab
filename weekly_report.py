@@ -96,6 +96,58 @@ def main():
             print("[5] FRAMEWORK      no framework closed trades yet — waiting for first exits")
     except Exception as e:
         print("[5] FRAMEWORK   ERR", e)
+    print()
+
+    # 6) October verdict gate (see VERDICT.md). Measured go/no-go, honest.
+    try:
+        gates = {}
+        conn = brain.init_db()
+
+        # G1 STABILITY: no full-day outage in the last 14 days.
+        # equity_history holds one row per day, so a gap > 60h = missed days.
+        days = conn.execute(
+            "SELECT date FROM equity_history ORDER BY date DESC LIMIT 14").fetchall()
+        prev = None
+        gaps = []
+        for (d,) in days:
+            try:
+                t = datetime.fromisoformat(d)
+            except Exception:
+                continue
+            if prev is not None:
+                gaps.append((prev - t).total_seconds() / 3600)
+            prev = t
+        stable = bool(gaps) and max(gaps) <= 60
+        gates["Stability (no outage 14d)"] = stable
+
+        # G2 DRAWDOWN: current drawdown within design bounds.
+        bound = float(df["drawdown_pct"].iloc[-1]) >= -12 if not df.empty else False
+        gates["Drawdown >= -12%"] = bound
+
+        # G3 FRAMEWORK: first framework trades prove positive expectancy.
+        fw = conn.execute(
+            "SELECT COUNT(*), AVG(pnl_pct) FROM trade_pnl "
+            "WHERE strategy LIKE '%flag%' OR strategy LIKE '%orb%'").fetchone()
+        fw_n, fw_avg = (fw or (0, None))
+        fw_ok = bool(fw_n and fw_n >= 15 and (fw_avg or 0) >= 0.25)
+        gates["Framework trades n>=15 avg>=+0.25%"] = fw_ok
+
+        # G4 READINESS.
+        ready = float(r["score"]) >= 85
+        gates["Readiness >= 85/100"] = ready
+        conn.close()
+
+        print("[6] OCTOBER VERDICT GATE")
+        for name, ok in gates.items():
+            print(f"      [{'PASS' if ok else 'PEND'}]  {name}")
+        if all(gates.values()):
+            print("      VERDICT: READY — measured evidence supports real money")
+        elif not fw_ok:
+            print("      VERDICT: PENDING — waiting for first framework exits (honest gate)")
+        else:
+            print("      VERDICT: NOT READY yet — see failing gates above")
+    except Exception as e:
+        print("[6] VERDICT    ERR", e)
 
 
 if __name__ == "__main__":
