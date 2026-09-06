@@ -1,7 +1,7 @@
 import json
 import csv
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -2554,7 +2554,19 @@ def save_config(cfg):
 def config_is_stale(cfg, days=1):
     if cfg is None:
         return True
-    return datetime.now() - datetime.fromisoformat(cfg["updated"]) > timedelta(days=days)
+    try:
+        updated = datetime.fromisoformat(str(cfg["updated"]))
+        if updated.tzinfo is not None:
+            # Configs written by the auto-promotion may carry a UTC offset;
+            # normalize to UTC-naive so the comparison is tz-safe.
+            updated = updated.astimezone(timezone.utc).replace(tzinfo=None)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+        else:
+            now = datetime.now()
+        return now - updated > timedelta(days=days)
+    except Exception:
+        # Corrupt/unknown timestamps count as stale so the config gets re-tuned.
+        return True
 
 
 def current_state(df, cfg):

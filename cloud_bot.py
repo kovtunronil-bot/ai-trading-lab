@@ -123,6 +123,13 @@ def run_cloud():
     # its backtests on the latest data and keeps only what beats buy-and-hold
     # in the current regime. Only stale symbols run, so this stays light, and
     # each symbol re-evolves roughly once a day.
+    # Daily self-tuning is owned by the measured strategy-scan promotion
+    # pipeline (4y/3y/2y validation, Sharpe>1.05x beat bar, framework-only).
+    # The legacy evolve_all() scorer elects winners by an equity-curve metric
+    # that can disagree with the SL/TP backtest and has clobbered measured
+    # configs (AAPL was rewritten to vwap_rev_fw S=-7.47 on 2026-09-06, then
+    # restored by the scan). Keep evolve_all() available for ad-hoc/manual
+    # review only; never let it auto-write live configs.
     try:
         stale = []
         for s in brain.ALL:
@@ -130,8 +137,7 @@ def run_cloud():
             if _cfg and brain.config_is_stale(_cfg) and str(_cfg.get("mode", "")).endswith("_fw"):
                 stale.append(s)
         if stale:
-            print(f"[SELF-LEARN] re-evolving {len(stale)} stale markets: {stale}")
-            brain.evolve_all(stale, force_print=False)
+            print(f"[SELF-LEARN] {len(stale)} markets stale: {stale} (measured promotion pipeline decides)")
     except Exception as e:
         print(f"[SELF-LEARN] skipped ({e})")
 

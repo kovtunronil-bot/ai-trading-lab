@@ -13,7 +13,7 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-06T09:09:36+00:00",
+  "updated": "2026-09-06T09:09:36",
   "entry": 30,
   "promoted": {
     "from": "vwap_rev_fw",
@@ -22,7 +22,7 @@
     "dd": -10.8,
     "sharpe_2y": 2.21,
     "sharpe_3y": 1.53,
-    "updated": "2026-09-06T09:09:36+00:00",
+    "updated": "2026-09-06T09:09:36",
     "note": "auto-promotion: 4y/3y/2y validation + Sharpe>1.05x bar"
   }
 }

@@ -95,10 +95,10 @@ def _promote_cfg(path, cfg, cand, cur, sym):
         "dd": round(m4["dd"], 1),
         "sharpe_2y": round(m2["sharpe"], 2),
         "sharpe_3y": round(m3["sharpe"], 2),
-        "updated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "updated": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
         "note": "auto-promotion: 4y/3y/2y validation + Sharpe>1.05x bar",
     }
-    cfg["updated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cfg["updated"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, indent=2)
         fh.write("\n")
