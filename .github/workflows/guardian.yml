@@ -1,0 +1,48 @@
+name: Bot Guardian
+
+# Self-healing cadence for the AI Trading Robot. GitHub Actions delivers
+# `schedule` runs with unpredictable delays (observed: minutes to hours),
+# which can leave a trading bot silent for long stretches on a market day.
+# Guardian runs on an INDEPENDENT schedule slot (:00/:30) and re-dispatches
+# the bot whenever the bot's heartbeat (its last DB/journal commit) is older
+# than ~45 minutes. The bot workflow itself is idempotent (safe to run more
+# often than every 30 min).
+#
+# Optional SLA-grade upgrade: GitHub schedules stay best-effort. For a hard
+# guarantee, add a fine-grained PAT (Actions: write) as the DISPATCH_TOKEN
+# secret and point an external cron (e.g. https://cron-job.org) at
+#   POST /repos/{owner}/{repo}/dispatches   {"event_type":"bot-cron"}
+# enabled with `on.repository_dispatch` on a future workflow.
+
+on:
+  schedule:
+    - cron: '0,30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Re-dispatch bot if heartbeat is cold
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Last commit touching the bot's live-storage files is our heartbeat.
+          LAST=$(( $(git log -1 --format=%ct -- lab.db state.json proposals.json journal.csv 2>/dev/null) || echo 0 ))
+          NOW=$(date +%s)
+          AGE_MIN=$(( (NOW - LAST) / 60 ))
+          echo "bot last heartbeat ${AGE_MIN} min ago"
+          if [ "$AGE_MIN" -gt 45 ]; then
+            echo "heartbeat COLD -> dispatching AI Trading Robot"
+            gh workflow run "AI Trading Robot" --repo "$GITHUB_REPOSITORY" --ref master
+          else
+            echo "heartbeat fresh -> cadence is healthy, nothing to do"
+          fi
