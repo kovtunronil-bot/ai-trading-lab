@@ -5,7 +5,7 @@
   "regime": "QUIET_RANGE",
   "test_score": 2.729088,
   "hold_test_score": -99.0,
-  "updated": "2026-09-04T23:23:09",
+  "updated": "2026-09-06T01:21:58",
   "adaptive": {
     "rsi_buy": 20,
     "rsi_sell": 55,

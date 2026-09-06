@@ -1,11 +1,9 @@
 {
-  "mode": "flag_fw",
-  "fast": 20,
-  "slow": 50,
-  "label": "Momentum Flag Pullback",
+  "mode": "vwap_rev_fw",
+  "label": "VWAP Reversion",
   "symbol": "SPY",
   "regime": "QUIET_RANGE",
-  "test_score": 1.8056640000000002,
+  "test_score": 2.56856,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,
@@ -15,11 +13,5 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-04T23:23:07",
-  "promoted": {
-    "from": "ema_cross",
-    "mode": "flag_fw",
-    "framework_sharpe": 3.93,
-    "note": "Sharpe-driven promotion from framework backtest"
-  }
+  "updated": "2026-09-06T01:21:57"
 }

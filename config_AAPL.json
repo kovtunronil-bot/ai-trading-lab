@@ -1,10 +1,9 @@
 {
-  "mode": "flag_fw",
-  "label": "Flag Pattern Fade (Flag FW)",
+  "mode": "vwap_rev_fw",
+  "label": "VWAP Reversion",
   "symbol": "AAPL",
   "regime": "QUIET_RANGE",
-  "entry": 30,
-  "test_score": 2.69,
+  "test_score": 3.468576,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,
@@ -14,5 +13,5 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-04T23:23:07"
+  "updated": "2026-09-06T01:21:57"
 }
