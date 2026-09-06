@@ -34,16 +34,4 @@ jobs:
       - name: Re-dispatch bot if heartbeat is cold
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Last commit touching the bot's live-storage files is our heartbeat.
-          LAST=$(git log -1 --format=%ct -- lab.db state.json proposals.json journal.csv 2>/dev/null)
-          LAST=${LAST:-0}
-          NOW=$(date +%s)
-          AGE_MIN=$(( (NOW - LAST) / 60 ))
-          echo "bot last heartbeat ${AGE_MIN} min ago"
-          if [ "$AGE_MIN" -gt 45 ]; then
-            echo "heartbeat COLD -> dispatching AI Trading Robot"
-            gh workflow run "AI Trading Robot" --repo "$GITHUB_REPOSITORY" --ref master
-          else
-            echo "heartbeat fresh -> cadence is healthy, nothing to do"
-          fi
+        run: bash scripts/bot_heartbeat.sh "AI Trading Robot"

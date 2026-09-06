@@ -2,8 +2,12 @@ name: AI Trading Robot
 
 on:
   schedule:
-    - cron: '15,45 * * * *'                               # Every 30 min (UTC)
+    - cron: '5,15,35,45 * * * *'                          # 4 slots/h (GitHub cron is flaky)
   workflow_dispatch:                       # Manual trigger button
+
+concurrency:
+  group: bot-run
+  cancel-in-progress: false
 
 jobs:
   trade:
@@ -39,6 +43,9 @@ jobs:
       run: |
         git config user.name "Trading Robot"
         git config user.email "robot@bot.local"
+        git checkout master
+        git fetch origin master
+        git reset --hard origin/master
         git add lab.db config_*.json state.json proposals.json
         git diff --cached --quiet && exit 0
         git commit -m "bot update $(date -u +%Y-%m-%dT%H:%M)"

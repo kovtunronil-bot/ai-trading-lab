@@ -1,0 +1,30 @@
+name: Bot Guardian 2
+
+# Second, independent heartbeat watchdog on disjoint schedule slots (:10/:40).
+# GitHub Actions delivers `schedule` runs with random delays; two solo
+# workflows with disjoint minute-sets make it far more likely that at least
+# one fires each hour and rescues the bot cadence before it goes cold.
+# Uses the shared check in scripts/bot_heartbeat.sh. Bot runs are serialized
+# by the bot.yml `concurrency` group, so overlapping dispatches are safe.
+
+on:
+  schedule:
+    - cron: '10,40 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Re-dispatch bot if heartbeat is cold
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/bot_heartbeat.sh "AI Trading Robot"
