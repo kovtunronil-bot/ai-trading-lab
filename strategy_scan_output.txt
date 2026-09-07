@@ -1,4 +1,4 @@
-AAPL     vwap_rev_fw  S=-7.47 DD=-99.6%  -> UPGRADE flag_fw e=30: S4y=+2.69 DD4y=-10.8% S2y=+2.21 n=131
+AAPL     flag_fw      S=+2.69 DD=-10.8%  (no alt above bar)
 AMD      flag_fw      S=+7.01 DD=-14.0%  (best alt orb_fw e=10: S4y=+5.60 DD4y=-19.6% — below bar)
 AMZN     flag_fw      S=+2.91 DD=-8.7%  (no alt above bar)
 BAC      flag_fw      S=+6.52 DD=-7.3%  (best alt heikin_fw e=10: S4y=-0.86 DD4y=-21.8% — below bar)
