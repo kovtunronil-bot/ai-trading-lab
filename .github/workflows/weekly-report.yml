@@ -5,6 +5,10 @@ on:
     - cron: '0 6 * * 0'          # Every Sunday 06:00 UTC
   workflow_dispatch:             # Manual trigger button
 
+concurrency:
+  group: repo-writer
+  cancel-in-progress: false
+
 jobs:
   report:
     runs-on: ubuntu-latest

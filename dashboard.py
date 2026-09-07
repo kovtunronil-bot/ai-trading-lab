@@ -147,6 +147,35 @@ def load_readiness():
         return {"score": 0, "checks": []}
 
 
+def load_verdict():
+    """October go/no-go gates (mirrors weekly_report [6]). Read-only."""
+    try:
+        conn = brain.init_db()
+        days = conn.execute(
+            "SELECT date FROM equity_history ORDER BY date DESC LIMIT 14").fetchall()
+        fw = conn.execute(
+            "SELECT COUNT(*), AVG(pnl_pct) FROM trade_pnl "
+            "WHERE strategy LIKE '%flag%' OR strategy LIKE '%orb%'").fetchone()
+        conn.close()
+        prev = None
+        gaps = []
+        for (d,) in days:
+            try:
+                t = datetime.fromisoformat(d)
+            except Exception:
+                continue
+            if prev is not None:
+                gaps.append((prev - t).total_seconds() / 3600)
+            prev = t
+        stable = bool(gaps) and max(gaps) <= 60
+        fw_n, fw_avg = (fw or (0, None))
+        fw_ok = bool(fw_n and fw_n >= 15 and (fw_avg or 0) >= 0.25)
+        avg_s = f"{fw_avg:+.2f}%" if fw_avg is not None else "—"
+        return {"stable": stable, "fw_ok": fw_ok, "fw_label": f"{fw_n or 0} trades / avg {avg_s}"}
+    except Exception:
+        return {"stable": False, "fw_ok": False, "fw_label": "n/a"}
+
+
 def build_html():
     eq = load_equity()
     png_b64 = base64.b64encode(make_chart_png(eq)).decode()
@@ -206,6 +235,18 @@ def build_html():
     if not score_rows:
         score_rows = "<tr><td colspan=4>no closed trades yet — learning begins after first exits</td></tr>"
 
+    ver = load_verdict()
+    dd_ok = dd >= -12
+    r_ok = ready["score"] >= 85
+    ver_rows = "".join(
+        "<tr><td>{}</td><td {}>{}</td></tr>".format(
+            k, "pos" if v else "neg", "✅ PASS" if v else "⏳ PENDING")
+        for k, v in (("Stability (no outage 14d)", ver["stable"]),
+                     ("Drawdown ≥ -12%", dd_ok),
+                     ("Framework trades ≥15, avg ≥ +0.25%", ver["fw_ok"]),
+                     ("Readiness ≥ 85/100", r_ok)))
+    verdict_ok = ver["stable"] and dd_ok and ver["fw_ok"] and r_ok
+
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>AI Trading Robot — Dashboard</title>
 <meta http-equiv="refresh" content="300">
@@ -235,6 +276,7 @@ li {{ margin:4px 0; color:#cbd5e1; }}
 <div class="card"><div class="small">AVG SLIPPAGE</div><div class="big" style="font-size:20px">{slippage or '—'}</div></div>
 <div class="card"><div class="small">INCIDENTS 7d</div><div class="big" style="font-size:20px">{incidents}</div></div>
 <div class="card"><div class="small">REAL-MONEY READY</div><div class="big">{ready_emoji} {ready['score']}/100</div></div>
+<div class="card"><div class="small">OCTOBER GATE</div><div class="big" style="font-size:20px">{'✅ READY' if verdict_ok else '⏳ PENDING'}</div></div>
 </div>
 <h2>Open positions <span class="small">(snapshot {snap_time})</span></h2>
 <table><tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Value</th><th>P&L</th></tr>
@@ -245,6 +287,8 @@ li {{ margin:4px 0; color:#cbd5e1; }}
 {score_rows}</table>
 <h2>Champion strategies (per market)</h2>
 <table><tr><th>Market</th><th>Strategy</th><th>Test score</th><th>Checked</th></tr>{champ_rows}</table>
+<h2>October verdict gate <span class="small">(framework live: {ver['fw_label']})</span></h2>
+<table><tr><th>Gate</th><th>Status</th></tr>{ver_rows}</table>
 <h2>Sector concentration <span class="small">(SECTOR_CAP {brain.SECTOR_CAP*100:.0f}%)</span></h2>
 <table><tr><th>Sector</th><th>Markets</th><th>Count</th><th>Share</th></tr>{sector_rows}</table>
 <p class="small">tech share {tech_pct:.0f}% of {sector_total} markets in universe (SECTOR_CAP {brain.SECTOR_CAP*100:.0f}% applies to deployed capital, enforced live)</p>

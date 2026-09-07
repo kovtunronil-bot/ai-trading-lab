@@ -6,7 +6,7 @@ on:
   workflow_dispatch:                       # Manual trigger button
 
 concurrency:
-  group: bot-run
+  group: repo-writer
   cancel-in-progress: false
 
 jobs:
