@@ -13,6 +13,19 @@ writes the result into `_reports/weekly_YYYY-MM-DD.txt`.
 | Framework trades | >= 15 closed framework trades AND avg pnl >= +0.25%. | Forward live evidence of positive expectancy on framework trades alone (legacy results don't count). |
 | Readiness | readiness_score >= 85/100. | The existing integrity/execution/performance scorecard. |
 
+## Significant-improvement bar (what "actually better" means)
+
+Beyond the base gates, "substantial" improvement is defined forward-looking:
+
+| Metric | Bar |
+|--------|-----|
+| Framework expectancy | >= +0.5% avg per closed trade |
+| Win rate | >= 50% on framework trades |
+| Worst framework drawdown | >= -8% (tighter than global bound) |
+| Config turnover | <= 1 promotion per 14 days (converged line-up, not churn) |
+
+These are scored on forward live results only — backtests and hope don't count.
+
 ## Rules of the road until then
 
 - Single tuning path: the measured strategy scan (auto-promotion, strict 4y/3y gate).
