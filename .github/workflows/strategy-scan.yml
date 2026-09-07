@@ -29,6 +29,9 @@ jobs:
         run: |
           git config user.name "Strategy Scanner"
           git config user.email "scanner@bot.local"
+          git checkout master
+          git fetch origin master
+          git reset --hard origin/master
           git add config_*.json strategy_scan_output.txt
           git diff --cached --quiet && exit 0
           git commit -m "strategy-scan: auto-promotions $(date -u +%Y-%m-%dT%H:%M)"

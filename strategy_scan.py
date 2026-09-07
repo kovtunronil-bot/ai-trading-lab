@@ -39,10 +39,10 @@ ALL_MODES = [
     "breakout_fw", "divergence_fw", "heikin_fw", "vwap_rev_fw", "fvg_fw",
 ]
 ENTRIES = {
-    "breakout_fw": [20, 55], "divergence_fw": [14, 20], "heikin_fw": [10, 20],
-    "vwap_rev_fw": [10, 20], "vwap_fw": [10, 20], "smc_fw": [10, 20],
-    "boll_fw": [20, 30], "orb_fw": [10, 20], "flag_fw": [30, 20],
-    "gap_fade_fw": [10, 20], "fvg_fw": [10, 20],
+    "breakout_fw": [20, 55, 35], "divergence_fw": [14, 20, 17], "heikin_fw": [10, 20, 15],
+    "vwap_rev_fw": [10, 20, 15], "vwap_fw": [10, 20, 15], "smc_fw": [10, 20, 15],
+    "boll_fw": [20, 30, 25], "orb_fw": [10, 20, 15], "flag_fw": [30, 20, 25],
+    "gap_fade_fw": [10, 20, 15], "fvg_fw": [10, 20, 15],
 }
 
 DD_FLOOR = -25.0
