@@ -47,4 +47,6 @@ jobs:
         git add _reports/
         git diff --cached --quiet && exit 0
         git commit -m "weekly report $(date -u +%Y-%m-%d)"
+        git fetch origin master
+        git rebase origin/master
         git push origin HEAD:master

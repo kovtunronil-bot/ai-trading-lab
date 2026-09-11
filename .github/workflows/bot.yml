@@ -43,10 +43,9 @@ jobs:
       run: |
         git config user.name "Trading Robot"
         git config user.email "robot@bot.local"
-        git checkout master
-        git fetch origin master
-        git reset --hard origin/master
         git add lab.db config_*.json state.json proposals.json
         git diff --cached --quiet && exit 0
         git commit -m "bot update $(date -u +%Y-%m-%dT%H:%M)"
+        git fetch origin master
+        git rebase origin/master
         git push origin HEAD:master
