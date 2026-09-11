@@ -783,6 +783,34 @@ def run_cloud():
         actions[symbol] = (action, detail)
         print(f"  {symbol:8s} | {action:16s} | {detail[:60]}")
 
+    # LIVE LEARNING during hard periods (react to unrealized losses now, not on exit).
+    try:
+        _u_map = {}
+        for _p in positions:
+            _bi = brain.internal_sym(_p.symbol)
+            try:
+                _cb = float(_p.cost_basis) or 0.0
+                _mv = float(_p.market_value)
+                if _cb > 0:
+                    _u_map[_bi] = _mv / _cb - 1.0
+            except Exception:
+                pass
+        _reg_counts = {}
+        for _sym in held_symbols:
+            _df = all_data.get(_sym, pd.DataFrame())
+            if not _df.empty:
+                _r = brain.current_regime(_df)
+                _reg_counts[_r] = _reg_counts.get(_r, 0) + 1
+        _port_regime = max(_reg_counts, key=_reg_counts.get) if _reg_counts else "UNKNOWN"
+        _losses = brain.learn_live_period(_port_regime, drawdown, _u_map)
+        if _losses > 0:
+            print(f"  LIVE-LEARN: {_losses} position(s) open losing >3% "
+                  f"({_port_regime}, DD {drawdown*100:.1f}%) - caps tightened")
+            brain.send_alert(f"LIVE-LEARN: {_losses} open position(s) losing >3% now "
+                             f"(regime {_port_regime}, DD {drawdown*100:.1f}%) - exposure tightened")
+    except Exception as _e:
+        print(f"  live-learn skipped ({_e})")
+
     brain.log_equity(equity, peak)
 
     print("\n[LEARN]")

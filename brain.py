@@ -160,7 +160,15 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS loss_memory(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ts TEXT, symbol TEXT, strategy TEXT, regime TEXT,
-        pnl_pct REAL, conditions TEXT)""")
+        pnl_pct REAL, conditions TEXT, source TEXT)""")
+    try:
+        c.execute("ALTER TABLE loss_memory ADD COLUMN source TEXT")
+    except sqlite3.OperationalError:
+        pass
+    c.execute("""CREATE TABLE IF NOT EXISTS regime_drawdown(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        regime TEXT, ts TEXT, portfolio_dd REAL,
+        avg_unrealised_pnl REAL, n_positions INTEGER)""")
     c.execute("""CREATE TABLE IF NOT EXISTS tf_agreement_log(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ts TEXT, symbol TEXT, daily_signal TEXT, h4_signal TEXT,
@@ -312,6 +320,93 @@ def log_loss_conditions(symbol, strategy, regime, pnl_pct, conditions=""):
         pass
 
 
+def log_live_loss(symbol, regime, pnl_pct):
+    """Record an unrealized loss observed live, once per symbol+regime per UTC day,
+    so loss_memory/should_avoid/conviction react during hard periods, not only on exit."""
+    try:
+        conn = init_db()
+        day = datetime.now().strftime("%Y-%m-%d")
+        row = conn.execute(
+            "SELECT COUNT(*) FROM loss_memory WHERE symbol=? AND regime=? "
+            "AND source='LIVE' AND ts LIKE ?",
+            (symbol, regime, day + "%")).fetchone()
+        if row[0] > 0:
+            conn.close()
+            return False
+        conn.execute(
+            "INSERT INTO loss_memory(ts,symbol,strategy,regime,pnl_pct,conditions,source) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (datetime.now().isoformat(timespec="seconds"), symbol, "LIVE-UNREALIZED", regime,
+             float(pnl_pct), "live period learning", "LIVE"))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return False
+
+
+def log_regime_drawdown(regime, portfolio_dd, avg_unrealised_pnl=None, n_positions=0):
+    """Snapshot live portfolio drawdown per regime each run, so protection can
+    adapt to observed reality inside a hard period."""
+    try:
+        conn = init_db()
+        conn.execute(
+            "INSERT INTO regime_drawdown(regime,ts,portfolio_dd,avg_unrealised_pnl,n_positions) "
+            "VALUES(?,?,?,?,?)",
+            (regime, datetime.now().isoformat(timespec="seconds"), float(portfolio_dd),
+             float(avg_unrealised_pnl) if avg_unrealised_pnl is not None else None,
+             int(n_positions)))
+        conn.commit()
+        conn.close()
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def empirical_cap_factor(regime, lookback_hours=24):
+    """How badly has the portfolio actually done live in this regime recently?
+    Returns a tightening factor in (0, 1]; 1.0 means no observed pain."""
+    try:
+        cutoff = (datetime.now() - timedelta(hours=lookback_hours)).isoformat(timespec="seconds")
+        conn = init_db()
+        rows = conn.execute(
+            "SELECT portfolio_dd FROM regime_drawdown WHERE regime=? AND ts >= ? ORDER BY id",
+            (regime, cutoff)).fetchall()
+        conn.close()
+        if not rows:
+            return 1.0
+        worst = min(float(r[0]) for r in rows if r[0] is not None)
+        if worst < -0.08:
+            return 0.5
+        if worst < -0.05:
+            return 0.65
+        if worst < -0.03:
+            return 0.8
+        return 1.0
+    except Exception:
+        return 1.0
+
+
+def learn_live_period(portfolio_regime, portfolio_dd, unrealized_map):
+    """Real-time learning pass over open positions during hard periods.
+    Returns how many NEW daily loss records were logged this run."""
+    losses = 0
+    for sym, upnl in (unrealized_map or {}).items():
+        if isinstance(upnl, (int, float)) and upnl < -0.03:
+            if log_live_loss(sym, portfolio_regime or "UNKNOWN", round(float(upnl) * 100, 2)):
+                losses += 1
+    vals = [float(v) for v in (unrealized_map or {}).values() if isinstance(v, (int, float))]
+    avg = round(sum(vals) / len(vals), 4) if vals else None
+    log_regime_drawdown(portfolio_regime or "UNKNOWN", float(portfolio_dd), avg, len(vals))
+    return losses
+
+
 def should_avoid(symbol, current_regime):
     try:
         conn = init_db()
@@ -364,7 +459,8 @@ def dynamic_heat_cap(regime, drawdown=0.0):
         cap *= 0.7
     elif drawdown < -0.03:
         cap *= 0.85
-    return round(cap, 2)
+    cap *= empirical_cap_factor(regime)
+    return max(0.35, round(cap, 2))
 
 
 def correlation_de_risk(closes, held_symbols, corr_threshold=0.85, min_group=3, trim_fraction=0.30):
