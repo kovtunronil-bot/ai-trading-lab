@@ -1,0 +1,33 @@
+=== AI TRADING ROBOT — WEEKLY HONEST REPORT ===
+generated: 2026-09-13 10:49:27 
+
+[1] EQUITY      $95,916.68
+    PEAK        $100,000.00
+    DRAWDOWN    -4.1%
+
+[2] CLOSED TRADES  259   cum P&L +786.93%
+    per strategy:
+      ATRbrk 55d x1.0            n=  14  avg=+22.61%  sum=+316.58%
+      Stoch14 <20/>80            n=  39  avg=+3.68%  sum=+143.38%
+      RSI2 <5/60                 n=  37  avg=+1.81%  sum=+66.86%
+      Momentum 6m                n=  55  avg=+1.21%  sum=+66.52%
+      ADX>20 trend-on            n=  30  avg=+2.21%  sum=+66.27%
+      Bollinger dip              n=  18  avg=+2.28%  sum=+41.09%
+      RSI4 <20/60                n=  28  avg=+1.38%  sum=+38.58%
+      EMA9/21                    n=  22  avg=+1.44%  sum=+31.66%
+      ATRbrk 30d x0.5            n=  12  avg=+2.17%  sum=+26.08%
+      RSI14 <25/55               n=   4  avg=-2.53%  sum=-10.10%   <-- losing
+
+[3] INTEGRITY  compile: OK
+    configs loaded: 20/20
+
+[4] READINESS  77.5/100
+
+[5] FRAMEWORK      no framework closed trades yet — waiting for first exits
+
+[6] OCTOBER VERDICT GATE
+      [PEND]  Stability (no outage 14d)
+      [PASS]  Drawdown >= -12%
+      [PEND]  Framework trades n>=15 avg>=+0.25%
+      [PEND]  Readiness >= 85/100
+      VERDICT: PENDING — waiting for first framework exits (honest gate)
