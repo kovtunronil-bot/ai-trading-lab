@@ -19,7 +19,5 @@
     "mode": "flag_fw",
     "framework_sharpe": 2.91,
     "note": "Sharpe-driven promotion from framework backtest"
-  },
-  "fw_entry": 259.35,
-  "fw_sl": 238.602
+  }
 }
