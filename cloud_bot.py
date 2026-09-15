@@ -810,7 +810,10 @@ def run_cloud():
         _fmode = _cfg.get("mode") in ("smc_fw", "breakout_fw", "divergence_fw",
                                       "vwap_fw", "heikin_fw", "boll_fw",
                                       "orb_fw", "vwap_rev_fw", "flag_fw", "gap_fade_fw")
-        if not _fmode or _cfg.get("fw_sl"):
+        if not _fmode:
+            continue
+        _sl_state = brain.existing_stop_state(float(_p.avg_entry_price), _cfg.get("fw_sl"))
+        if _sl_state == "real":
             continue
         _df = all_data.get(_internal, pd.DataFrame())
         if _df.empty:
@@ -828,14 +831,21 @@ def run_cloud():
             _sig, _sl, _tp = 0, 0, 0
         if _sig and _sl > 0:
             _sl = brain.clamp_stop_from_entry(_entry, _sl)
+            _cfg["fw_entry"] = round(_entry, 4)
+            _cfg["fw_sl"] = round(_sl, 4)
+            if _tp and float(_tp) > 0:
+                _cfg["fw_tp"] = round(float(_tp), 4)
+            brain.save_config(_cfg)
+            print(f"  ADOPTED-LEVELS {_internal}: fw_entry={_entry:.2f} fw_sl={_sl:.2f}")
         else:
-            _sl = _entry * 0.92  # prudent default: 8% stop
-        _cfg["fw_entry"] = round(_entry, 4)
-        _cfg["fw_sl"] = round(_sl, 4)
-        if _tp and _tp > 0:
-            _cfg["fw_tp"] = round(_tp, 4)
-        brain.save_config(_cfg)
-        print(f"  ADOPTED-LEVELS {_internal}: fw_entry={_entry:.2f} fw_sl={_sl:.2f}")
+            # no framework signal today — clear any placeholder so the generic
+            # stop (with hard-regime tightening) governs this position
+            _cfg.pop("fw_entry", None)
+            _cfg.pop("fw_sl", None)
+            _cfg.pop("fw_tp", None)
+            brain.save_config(_cfg)
+            if _sl_state == "placeholder":
+                print(f"  ADOPTED-LEVELS {_internal}: cleared placeholder stop")
 
     # LIVE LEARNING during hard periods (react to unrealized losses now, not on exit).
     try:
@@ -882,7 +892,7 @@ def run_cloud():
             continue
         try:
             _qty = _trim / _curp
-            client.close_position(_p.symbol, qty=str(round(_qty, 8)))
+            oid, st, _ = smart_sell(_p.symbol, _qty, _curp)
             brain.log_journal(_internal, _curp, "REBALANCE-TRIM",
                               f"sold {_qty:.4f} {_p.symbol} (${_trim:,.0f})", equity)
             print(f"  REBALANCE {_p.symbol}: sold {_qty:.4f} to cap 20% "

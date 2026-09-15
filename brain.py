@@ -513,6 +513,28 @@ def clamp_stop_from_entry(entry, sl):
     return round(min(max(s, lo), hi), 2)
 
 
+def existing_stop_state(entry, existing_sl):
+    """Classify a persisted fw_sl for an adopted position:
+    'real' (genuine framework level), 'placeholder' (the 8% fallback the bot
+    wrote when no signal existed — must be re-evaluated each run),
+    or 'none' (missing/invalid)."""
+    try:
+        e = float(entry)
+    except (TypeError, ValueError):
+        return "none"
+    if e <= 0:
+        return "none"
+    try:
+        s = float(existing_sl)
+    except (TypeError, ValueError):
+        return "none"
+    if s <= 0:
+        return "none"
+    if abs(s - e * 0.92) / e < 0.01:
+        return "placeholder"
+    return "real"
+
+
 def correlation_de_risk(closes, held_symbols, corr_threshold=0.85, min_group=3, trim_fraction=0.30):
     """Live multi-asset de-risking based on a dynamic correlation matrix.
 

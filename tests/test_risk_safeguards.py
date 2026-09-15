@@ -73,6 +73,20 @@ class RiskSafeguardsTest(unittest.TestCase):
         # sl=80 on entry 100 → 20% loss, too wide → clamp to 92 (8%)
         self.assertAlmostEqual(brain.clamp_stop_from_entry(100.0, 80.0), 92.0)
 
+    # ---------- existing_stop_state ----------
+
+    def test_stop_state_none_when_missing(self):
+        self.assertEqual(brain.existing_stop_state(100.0, None), "none")
+        self.assertEqual(brain.existing_stop_state(100.0, 0), "none")
+
+    def test_stop_state_placeholder(self):
+        # entry*0.92 → the 8% fallback the bot writes when no signal exists
+        self.assertEqual(brain.existing_stop_state(100.0, 92.0), "placeholder")
+
+    def test_stop_state_real(self):
+        # a genuine framework SL (e.g. 5% below entry) is "real"
+        self.assertEqual(brain.existing_stop_state(100.0, 95.0), "real")
+
 
 if __name__ == "__main__":
     unittest.main()
