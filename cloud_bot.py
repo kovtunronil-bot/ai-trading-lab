@@ -207,6 +207,17 @@ def run_cloud():
             continue
         pnl_pct = cur / entry - 1
 
+        _live_reg = brain.current_regime(all_data.get(internal, pd.DataFrame()))
+
+        # STEP 4: supervised exit in hard regimes — exits immediately on
+        # significant unrealized loss, no waiting for framework exit signals.
+        if brain.supervised_loss_exit(_live_reg, pnl_pct):
+            if internal not in brain.CRYPTO and not market_open:
+                print(f"  {p.symbol} supervised loss {pnl_pct*100:+.1f}% but market closed — next open run")
+                continue
+            _close_and_learn(p, f"SUPERVISED-EXIT({pnl_pct*100:+.1f}%)", cur)
+            continue
+
         # EMERGENCY PROTECTION: hard exit. If a single position is down >12%
         # from entry, close it immediately regardless of other conditions.
         # This is the backstop for gap-throughs, flash crashes, or any
@@ -240,6 +251,9 @@ def run_cloud():
                 stop_fraction = min(stop_fraction, brain.POSITION_STOP_LOSS)
         except Exception:
             pass
+        # STEP 2: tighten the generic stop in hard regimes when no framework SL
+        if fw_sl is None:
+            stop_fraction *= brain.hard_regime_stop_multiplier(_live_reg)
         # 1) hard stop-loss (adaptive to strategy quality)
         if cur < entry * (1 - stop_fraction):
             if internal not in brain.CRYPTO and not market_open:
@@ -259,7 +273,6 @@ def run_cloud():
                 continue
             # 2) profit-lock / trailing stop on winners
             pos_peak = brain.update_position_peak(internal, cur, entry)
-            _live_reg = brain.current_regime(all_data.get(internal, pd.DataFrame()))
             if brain.profit_lock_hit(entry, cur, pos_peak, regime=_live_reg):
                 if internal not in brain.CRYPTO and not market_open:
                     print(f"  {p.symbol} profit-lock hit but market closed — next open run")
@@ -783,6 +796,47 @@ def run_cloud():
         actions[symbol] = (action, detail)
         print(f"  {symbol:8s} | {action:16s} | {detail[:60]}")
 
+    # STEP 1: persist framework SL/TP for adopted legacy positions that lack them.
+    # The framework adopted these positions but never saved fw_entry/fw_sl/fw_tp,
+    # so the risk_manager fell back to the generic 8% stop — too wide.
+    for _p in list(positions):
+        _internal = brain.internal_sym(_p.symbol)
+        try:
+            _cfg = brain.load_config(_internal)
+        except Exception:
+            continue
+        if not _cfg:
+            continue
+        _fmode = _cfg.get("mode") in ("smc_fw", "breakout_fw", "divergence_fw",
+                                      "vwap_fw", "heikin_fw", "boll_fw",
+                                      "orb_fw", "vwap_rev_fw", "flag_fw", "gap_fade_fw")
+        if not _fmode or _cfg.get("fw_sl"):
+            continue
+        _df = all_data.get(_internal, pd.DataFrame())
+        if _df.empty:
+            continue
+        try:
+            _entry = float(_p.avg_entry_price)
+        except Exception:
+            continue
+        try:
+            _rl = brain.compute_risk_levels(_df, _cfg)
+            _sig = int(_rl["signal"].iloc[-1])
+            _sl = float(_rl["sl"].iloc[-1]) if _sig else 0
+            _tp = float(_rl["tp"].iloc[-1]) if _sig else 0
+        except Exception:
+            _sig, _sl, _tp = 0, 0, 0
+        if _sig and _sl > 0:
+            _sl = brain.clamp_stop_from_entry(_entry, _sl)
+        else:
+            _sl = _entry * 0.92  # prudent default: 8% stop
+        _cfg["fw_entry"] = round(_entry, 4)
+        _cfg["fw_sl"] = round(_sl, 4)
+        if _tp and _tp > 0:
+            _cfg["fw_tp"] = round(_tp, 4)
+        brain.save_config(_cfg)
+        print(f"  ADOPTED-LEVELS {_internal}: fw_entry={_entry:.2f} fw_sl={_sl:.2f}")
+
     # LIVE LEARNING during hard periods (react to unrealized losses now, not on exit).
     try:
         _u_map = {}
@@ -810,6 +864,34 @@ def run_cloud():
                              f"(regime {_port_regime}, DD {drawdown*100:.1f}%) - exposure tightened")
     except Exception as _e:
         print(f"  live-learn skipped ({_e})")
+
+    # STEP 3: rebalance oversized positions back to max 20% of portfolio.
+    # Prevents single-stock concentration risk (e.g. BAC at 71% of equity).
+    for _p in list(positions):
+        _internal = brain.internal_sym(_p.symbol)
+        try:
+            _mv = float(_p.market_value)
+            _curp = float(_p.current_price)
+        except Exception:
+            continue
+        _trim = brain.position_trim_sell(_mv, equity)
+        if _trim <= 0 or _curp <= 0:
+            continue
+        if _internal not in brain.CRYPTO and not market_open:
+            print(f"  {_p.symbol} REBALANCE trim ${_trim:,.0f} but market closed")
+            continue
+        try:
+            _qty = _trim / _curp
+            client.close_position(_p.symbol, qty=str(round(_qty, 8)))
+            brain.log_journal(_internal, _curp, "REBALANCE-TRIM",
+                              f"sold {_qty:.4f} {_p.symbol} (${_trim:,.0f})", equity)
+            print(f"  REBALANCE {_p.symbol}: sold {_qty:.4f} to cap 20% "
+                  f"(${_mv:,.0f} -> ${_mv - _trim:,.0f})")
+            if _trim > 5000:
+                brain.send_alert(f"REBALANCE {_p.symbol}: trimmed ${_trim:,.0f} "
+                                 f"(${_mv:,.0f} -> ${_mv - _trim:,.0f})")
+        except Exception as _e:
+            print(f"  rebalance {_p.symbol} failed: {_e}")
 
     brain.log_equity(equity, peak)
 

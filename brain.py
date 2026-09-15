@@ -463,6 +463,56 @@ def dynamic_heat_cap(regime, drawdown=0.0):
     return max(0.35, round(cap, 2))
 
 
+HARD_EXIT_REGS = ("BEAR_TREND", "BEAR_RANGE", "HIGH_VOL")
+
+
+def hard_regime_stop_multiplier(regime):
+    """Tighten the generic stop in hard regimes (70% of width)."""
+    return 0.7 if regime in HARD_EXIT_REGS else 1.0
+
+
+def supervised_loss_exit(regime, pnl_pct, threshold=0.05):
+    """True when an open position should be exited because it is losing
+    more than threshold in a hard regime — reacts immediately, not on exit signals."""
+    return bool(
+        regime in HARD_EXIT_REGS
+        and isinstance(pnl_pct, (int, float))
+        and pnl_pct < -threshold
+    )
+
+
+def position_trim_sell(market_value, equity, max_pct=0.20, min_trim=500.0):
+    """How many dollars to trim a position that exceeds max_pct of portfolio.
+    Returns 0 if no trim needed or trim too small."""
+    try:
+        mv = float(market_value)
+        eq = float(equity)
+    except (TypeError, ValueError):
+        return 0.0
+    if eq <= 0 or mv <= 0:
+        return 0.0
+    cap = max_pct * eq
+    if mv <= cap:
+        return 0.0
+    trim = mv - cap
+    return round(trim, 2) if trim > min_trim else 0.0
+
+
+def clamp_stop_from_entry(entry, sl):
+    """Clamp a raw SL to a sane band relative to entry price.
+    Tightest allowed: 2% below (hi), widest: 8% below (lo)."""
+    try:
+        e = float(entry)
+        s = float(sl)
+    except (TypeError, ValueError):
+        return 0.0
+    if e <= 0:
+        return 0.0
+    lo = e * 0.92   # widest allowed (8% loss)
+    hi = e * 0.98   # tightest allowed (2% loss)
+    return round(min(max(s, lo), hi), 2)
+
+
 def correlation_de_risk(closes, held_symbols, corr_threshold=0.85, min_group=3, trim_fraction=0.30):
     """Live multi-asset de-risking based on a dynamic correlation matrix.
 
