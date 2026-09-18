@@ -14,5 +14,8 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-05T14:05:00"
+  "updated": "2026-09-05T14:05:00",
+  "fw_entry": 271.66,
+  "fw_sl": 260.16,
+  "fw_tp": 279.38
 }
