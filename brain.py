@@ -535,6 +535,48 @@ def existing_stop_state(entry, existing_sl):
     return "real"
 
 
+def framework_persist_levels(cfg, rl, symbol, fill_entry=None):
+    """Build a config dict with fw_sl/fw_tp/fw_entry persisted from a live
+    framework signal. Returns a NEW dict — or None when no valid signal —
+    so callers can save_config() it.
+
+    Persisting at SIGNAL time (not fill time) is the L1 fix: an order that
+    queues (BUY-QUEUED and later reconciled) still leaves the levels in
+    config, so the risk_manager stops riding framework positions to the
+    generic 8% stop and instead banks wins at TP / caps losses at SL.
+
+    fw_entry defaults to the framework entry; fill_entry overrides it with
+    the actual fill price (slippage/gap correction), and the SL is re-clamped
+    to that real entry price."""
+    try:
+        sig = int(rl["signal"].iloc[-1])
+        sl = float(rl["sl"].iloc[-1])
+        tp = float(rl["tp"].iloc[-1])
+        entry = float(rl["entry"].iloc[-1])
+    except (TypeError, ValueError, KeyError):
+        return None
+    if not sig or sl <= 0 or entry <= 0:
+        return None
+    if fill_entry is not None:
+        try:
+            fe = float(fill_entry)
+            if fe > 0:
+                ratio = fe / entry
+                sl = sl * ratio  # keep the strategy's relative SL distance
+                entry = fe
+        except (TypeError, ValueError):
+            pass
+    out = dict(cfg)
+    out["symbol"] = symbol
+    out["fw_entry"] = round(entry, 4)
+    out["fw_sl"] = clamp_stop_from_entry(entry, sl)
+    if tp > 0 and tp > entry:
+        out["fw_tp"] = round(tp, 4)
+    else:
+        out.pop("fw_tp", None)  # stale TP must not survive a signal-less update
+    return out
+
+
 def correlation_de_risk(closes, held_symbols, corr_threshold=0.85, min_group=3, trim_fraction=0.30):
     """Live multi-asset de-risking based on a dynamic correlation matrix.
 

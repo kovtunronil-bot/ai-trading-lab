@@ -602,6 +602,14 @@ def run_cloud():
                 sized_notional = units * fw_entry
                 fw_size = sized_notional
                 framework_levels[symbol] = {"sl": fw_sl, "tp": fw_tp, "entry": fw_entry}
+                # L1: persist SL/TP/entry to config AT SIGNAL TIME so an order
+                # that queues (BUY-QUEUED) and fills via reconcile still leaves
+                # real framework levels — the risk_manager banks wins at TP and
+                # caps losses at SL instead of riding to the generic 8% stop.
+                _fc = brain.framework_persist_levels(cfg, rl, symbol)
+                if _fc:
+                    cfg = _fc
+                    brain.save_config(cfg)
                 print(f">>> FRAMEWORK {symbol} {cfg.get('mode')}: "
                       f"SL={fw_sl:.2f} TP={fw_tp:.2f} -> "
                       f"{units:.2f} units = ${sized_notional:,.0f} (1.5% risk)")
@@ -737,13 +745,13 @@ def run_cloud():
                             if fw_mode and fw_size is not None:
                                 brain.mark_framework_first_open(symbol, cfg.get("label", "?"))
                             # Save framework SL/TP to config so risk_manager can use them.
-                            if symbol in framework_levels:
-                                _fl = framework_levels[symbol]
-                                cfg["fw_sl"] = _fl["sl"]
-                                cfg["fw_tp"] = _fl["tp"]
-                                cfg["fw_entry"] = _fl["entry"]
-                                cfg["symbol"] = symbol
-                                brain.save_config(cfg)
+                            # Rebuild around the REAL fill price (gap/slippage aware).
+                            if fw_mode and symbol in framework_levels and rl is not None:
+                                _fc = brain.framework_persist_levels(cfg, rl, symbol,
+                                                                     fill_entry=fill_price)
+                                if _fc:
+                                    _fc["symbol"] = symbol
+                                    brain.save_config(_fc)
                             action, detail = "BUY", f"${sized_notional:,.0f} conv={conviction:.0%}"
                             brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "BUY",
                                             sized_notional, None, None, st, "smart-limit",
@@ -825,18 +833,15 @@ def run_cloud():
         try:
             _rl = brain.compute_risk_levels(_df, _cfg)
             _sig = int(_rl["signal"].iloc[-1])
-            _sl = float(_rl["sl"].iloc[-1]) if _sig else 0
-            _tp = float(_rl["tp"].iloc[-1]) if _sig else 0
         except Exception:
-            _sig, _sl, _tp = 0, 0, 0
-        if _sig and _sl > 0:
-            _sl = brain.clamp_stop_from_entry(_entry, _sl)
-            _cfg["fw_entry"] = round(_entry, 4)
-            _cfg["fw_sl"] = round(_sl, 4)
-            if _tp and float(_tp) > 0:
-                _cfg["fw_tp"] = round(float(_tp), 4)
-            brain.save_config(_cfg)
-            print(f"  ADOPTED-LEVELS {_internal}: fw_entry={_entry:.2f} fw_sl={_sl:.2f}")
+            _rl, _sig = None, 0
+        if _sig:
+            _fc = brain.framework_persist_levels(_cfg, _rl, _internal, fill_entry=_entry)
+            if _fc:
+                _fc["symbol"] = _internal
+                brain.save_config(_fc)
+                print(f"  ADOPTED-LEVELS {_internal}: fw_entry={_fc['fw_entry']} "
+                      f"fw_sl={_fc['fw_sl']}")
         else:
             # no framework signal today — clear any placeholder so the generic
             # stop (with hard-regime tightening) governs this position

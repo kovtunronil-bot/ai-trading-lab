@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 
+import pandas as pd
+
 import brain
 
 
@@ -86,6 +88,46 @@ class RiskSafeguardsTest(unittest.TestCase):
     def test_stop_state_real(self):
         # a genuine framework SL (e.g. 5% below entry) is "real"
         self.assertEqual(brain.existing_stop_state(100.0, 95.0), "real")
+
+    # ---------- framework_persist_levels ----------
+
+    def _rl(self, sig=1, sl=95.0, tp=115.0, entry=100.0):
+        return pd.DataFrame({"signal": [sig], "sl": [sl], "tp": [tp], "entry": [entry]})
+
+    def test_persist_levels_from_signal(self):
+        out = brain.framework_persist_levels({"mode": "flag_fw"}, self._rl(), "TSLA")
+        self.assertIsNotNone(out)
+        self.assertEqual(out["fw_entry"], 100.0)
+        self.assertEqual(out["fw_sl"], 95.0)
+        self.assertEqual(out["fw_tp"], 115.0)
+        self.assertEqual(out["symbol"], "TSLA")
+
+    def test_no_persist_without_signal(self):
+        self.assertIsNone(brain.framework_persist_levels({"mode": "flag_fw"},
+                                                         self._rl(sig=0), "TSLA"))
+
+    def test_no_persist_invalid_sl(self):
+        self.assertIsNone(brain.framework_persist_levels({"mode": "flag_fw"},
+                                                         self._rl(sl=0), "TSLA"))
+
+    def test_fill_entry_overrides_and_clamps(self):
+        # hit a signal at entry 100 (SL 5% below) but actually filled at 90 (gap down):
+        # levels must be recomputed around the real fill, keeping the relative SL distance.
+        out = brain.framework_persist_levels({"mode": "flag_fw"}, self._rl(sl=95.0),
+                                             "TSLA", fill_entry=90.0)
+        self.assertAlmostEqual(out["fw_entry"], 90.0)
+        self.assertAlmostEqual(out["fw_sl"], 85.5)  # 5% below the real fill
+
+    def test_tp_dropped_when_not_profitable(self):
+        out = brain.framework_persist_levels({"mode": "flag_fw"}, self._rl(tp=105.0),
+                                             "TSLA", fill_entry=110.0)
+        self.assertNotIn("fw_tp", out)
+
+    def test_existing_keys_overwritten(self):
+        cfg = {"mode": "flag_fw", "fw_sl": 92.0, "fw_tp": 111.0, "fw_entry": 101.0}
+        out = brain.framework_persist_levels(cfg, self._rl(), "TSLA")
+        self.assertEqual(out["fw_sl"], 95.0)
+        self.assertEqual(out["fw_tp"], 115.0)
 
 
 if __name__ == "__main__":
