@@ -22,5 +22,8 @@
     "mode": "orb_fw",
     "framework_sharpe": 5.39,
     "note": "Sharpe-driven promotion from framework backtest"
-  }
+  },
+  "fw_entry": 349.54,
+  "fw_sl": 327.08,
+  "fw_tp": 394.451
 }
