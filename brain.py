@@ -46,6 +46,14 @@ DB_FILE = "lab.db"
 
 CIRCUIT_BREAKERS = [(-0.05, "CAUTION"), (-0.10, "HALT"), (-0.20, "LOCKDOWN")]
 POSITION_STOP_LOSS = 0.08
+
+
+def breaker_entries_allowed(level):
+    return level not in ("HALT", "LOCKDOWN")
+
+
+def breaker_entry_mult(level):
+    return 0.5 if level == "CAUTION" else 1.0
 PORTFOLIO_HEAT_CAP = 0.85
 TRAIL_ACTIVATE = 0.03
 TRAIL_GIVEBACK = 0.05

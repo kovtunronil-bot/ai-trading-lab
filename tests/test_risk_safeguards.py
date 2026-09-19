@@ -149,6 +149,27 @@ class RiskSafeguardsTest(unittest.TestCase):
     def test_allow_ignores_bad_drawdown_type(self):
         self.assertEqual(brain.framework_regime_gate("QUIET_RANGE", None), "allow")
 
+    # ---------- breaker CAUTION downsizing (user-approved) ----------
+
+    def test_caution_allows_entries(self):
+        self.assertTrue(brain.breaker_entries_allowed("CAUTION"))
+
+    def test_halt_and_lockdown_block_entries(self):
+        self.assertFalse(brain.breaker_entries_allowed("HALT"))
+        self.assertFalse(brain.breaker_entries_allowed("LOCKDOWN"))
+
+    def test_clear_breaker_allows_entries(self):
+        self.assertTrue(brain.breaker_entries_allowed(None))
+
+    def test_caution_halves_entry_size(self):
+        self.assertAlmostEqual(brain.breaker_entry_mult("CAUTION"), 0.5)
+
+    def test_no_breaker_full_size(self):
+        self.assertAlmostEqual(brain.breaker_entry_mult(None), 1.0)
+
+    def test_halt_full_mult_unused_but_safe(self):
+        self.assertAlmostEqual(brain.breaker_entry_mult("HALT"), 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

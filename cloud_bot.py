@@ -330,7 +330,7 @@ def run_cloud():
         state["halted"] = True
         state["lockdown"] = True
 
-    allow_entries = breaker_level not in ("CAUTION", "HALT", "LOCKDOWN")
+    allow_entries = brain.breaker_entries_allowed(breaker_level)
 
     # EMERGENCY PROTECTION: daily loss limit. If equity dropped >3% from the
     # previous day's close, stop all new entries for today. This prevents
@@ -415,6 +415,7 @@ def run_cloud():
                     notional = min(brain.vol_targeted_notional(vols, sym), 10000)
                     if sym in brain.CRYPTO:
                         notional *= 1.8
+                    notional *= brain.breaker_entry_mult(breaker_level)
                     df = all_data.get(sym, pd.DataFrame())
                     price = float(df["Close"].iloc[-1]) if not df.empty else None
                     if price and price > 0:
@@ -633,7 +634,11 @@ def run_cloud():
         fw_ready = fw_mode and fw_size is not None
         try:
             if (fw_ready or (not fw_mode and want_in)) and holding is None and allow_entries:
-                size_mult = 1.0
+                # CAUTION breaker (-5%..-10% DD): entries allowed but only at
+                # half size (user-approved). HALT/LOCKDOWN still block entirely.
+                size_mult = brain.breaker_entry_mult(breaker_level)
+                if breaker_level == "CAUTION":
+                    print(f"  {symbol}: CAUTION half-size entry (DD {drawdown*100:.1f}%)")
                 # L2: regime filter for framework longs — block in hard regimes,
                 # halve size when the portfolio is deep in drawdown.
                 if fw_mode and fw_ready:
