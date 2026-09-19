@@ -24,7 +24,7 @@
     "note": "manual: legacy atr_breakout (S0.57, DD-40%) had no validation in 5 windows; flag_fw halves DD, framework-gated entries/SL/TP. 2y NEGATIVE (recent era) - honest risk, monitored."
   },
   "updated": "2026-09-05T14:40:00",
-  "fw_entry": 2642.4399,
-  "fw_sl": 2431.04,
-  "fw_tp": 2847.9368
+  "fw_entry": 2638.74,
+  "fw_sl": 2427.64,
+  "fw_tp": 2844.2368
 }
