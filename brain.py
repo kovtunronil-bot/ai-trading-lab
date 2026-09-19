@@ -535,6 +535,27 @@ def existing_stop_state(entry, existing_sl):
     return "real"
 
 
+def framework_regime_gate(regime, drawdown=0.0, downsize_dd=-0.04):
+    """L2: regime filter for framework long entries.
+
+    Returns 'block' (hard regime — do not enter at all), 'downsize' (portfolio
+    deep in drawdown — enter at half size so n keeps growing while exposure
+    stays low), or 'allow' (normal entry).
+
+    Hard regimes block outright; soft/unknown regimes are tradable even though
+    they are not strong — otherwise n can never build toward the Performance
+    gate. Deep portfolio drawdown only halves size rather than blocking."""
+    if regime in HARD_EXIT_REGS:
+        return "block"
+    try:
+        dd = float(drawdown)
+    except (TypeError, ValueError):
+        dd = 0.0
+    if dd <= downsize_dd:
+        return "downsize"
+    return "allow"
+
+
 def framework_persist_levels(cfg, rl, symbol, fill_entry=None):
     """Build a config dict with fw_sl/fw_tp/fw_entry persisted from a live
     framework signal. Returns a NEW dict — or None when no valid signal —

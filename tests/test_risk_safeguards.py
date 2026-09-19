@@ -129,6 +129,26 @@ class RiskSafeguardsTest(unittest.TestCase):
         self.assertEqual(out["fw_sl"], 95.0)
         self.assertEqual(out["fw_tp"], 115.0)
 
+    # ---------- framework_regime_gate (L2) ----------
+
+    def test_block_in_hard_regimes(self):
+        for r in ("BEAR_TREND", "BEAR_RANGE", "HIGH_VOL"):
+            self.assertEqual(brain.framework_regime_gate(r, 0.0), "block")
+            self.assertEqual(brain.framework_regime_gate(r, -0.06), "block")
+
+    def test_downsize_in_deep_drawdown(self):
+        self.assertEqual(brain.framework_regime_gate("QUIET_RANGE", -0.06), "downsize")
+        self.assertEqual(brain.framework_regime_gate("BULL_TREND", -0.05), "downsize")
+        self.assertEqual(brain.framework_regime_gate("QUIET_RANGE", -0.04), "downsize")
+
+    def test_allow_in_supportive_conditions(self):
+        self.assertEqual(brain.framework_regime_gate("QUIET_RANGE", -0.03), "allow")
+        self.assertEqual(brain.framework_regime_gate("BULL_TREND", 0.0), "allow")
+        self.assertEqual(brain.framework_regime_gate("UNKNOWN", 0.0), "allow")
+
+    def test_allow_ignores_bad_drawdown_type(self):
+        self.assertEqual(brain.framework_regime_gate("QUIET_RANGE", None), "allow")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -633,6 +633,17 @@ def run_cloud():
         fw_ready = fw_mode and fw_size is not None
         try:
             if (fw_ready or (not fw_mode and want_in)) and holding is None and allow_entries:
+                size_mult = 1.0
+                # L2: regime filter for framework longs — block in hard regimes,
+                # halve size when the portfolio is deep in drawdown.
+                if fw_mode and fw_ready:
+                    _fg = brain.framework_regime_gate(live_regime, drawdown)
+                    if _fg == "block":
+                        action, detail = "REGIME-BLOCKED", f"{live_regime} blocks framework entries"
+                        print(f"  {symbol}: REGIME-BLOCKED ({live_regime})")
+                    elif _fg == "downsize":
+                        size_mult = 0.5
+                        print(f"  {symbol}: framework entry at 50% size (DD {drawdown*100:.1f}%)")
                 if brain.strategy_is_failing(symbol):
                     action, detail = "FAILING-STRATEGY-BLOCKED", "trained loser — skip entry"
                     print(f"  {symbol}: blocked — strategy {cfg.get('label')} has proven losing odds")
@@ -652,7 +663,6 @@ def run_cloud():
                     elif symbol in pending_symbols:
                         action, detail = "PENDING", "order working"
                     else:
-                        size_mult = 1.0
                         hc = brain.dynamic_heat_cap(live_regime, drawdown)
                         if deployed + sized_notional > hc * equity:
                             _heat_room = (hc * equity) - deployed
