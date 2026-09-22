@@ -48,7 +48,7 @@ def smart_buy(symbol, notional, ref_price):
                 symbol=symbol, side=OrderSide.BUY, time_in_force=tif,
                 qty=qty, limit_price=limit_price))
             time.sleep(5)
-            o = client.get_order(o.id)
+            o = client.get_order_by_id(o.id)
             st = str(o.status)
             if st in ("filled",):
                 fill = float(o.filled_avg_price)
@@ -57,7 +57,7 @@ def smart_buy(symbol, notional, ref_price):
                 # Give the band one more short window to fill before we
                 # abandon it. Choppy markets let the price come back to us.
                 time.sleep(8)
-                o = client.get_order(o.id)
+                o = client.get_order_by_id(o.id)
                 st = str(o.status)
                 if st in ("filled",):
                     fill = float(o.filled_avg_price)
@@ -91,7 +91,7 @@ def smart_buy(symbol, notional, ref_price):
             symbol=symbol, side=OrderSide.BUY, time_in_force=tif,
             qty=qty))
         time.sleep(5)
-        o = client.get_order(o.id)
+        o = client.get_order_by_id(o.id)
         return o.id, str(o.status), float(o.filled_avg_price) if o.filled_avg_price else None
     except Exception as e:
         return None, "error", None
@@ -103,7 +103,7 @@ def smart_sell(symbol, qty, ref_price):
         o = client.submit_order(MarketOrderRequest(
             symbol=symbol, side=OrderSide.SELL, time_in_force=tif, qty=float(qty)))
         time.sleep(5)
-        o = client.get_order(o.id)
+        o = client.get_order_by_id(o.id)
         return o.id, str(o.status), float(o.filled_avg_price) if o.filled_avg_price else None
     except Exception as e:
         return None, "error", None
