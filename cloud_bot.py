@@ -50,18 +50,18 @@ def smart_buy(symbol, notional, ref_price):
             time.sleep(5)
             o = client.get_order_by_id(o.id)
             st = brain.status_str(o.status)
-            if st in ("filled",):
-                fill = float(o.filled_avg_price)
-                return o.id, "filled", fill
+            if st in ("filled", "partially_filled"):
+                # partial-with-None avg price is still a WIN: report the fill,
+                # never raise into the cancel/escalate path (double-buy risk)
+                return o.id, "filled", float(o.filled_avg_price) if o.filled_avg_price else None
             elif st in ("accepted", "new", "pending_new"):
                 # Give the band one more short window to fill before we
                 # abandon it. Choppy markets let the price come back to us.
                 time.sleep(8)
                 o = client.get_order_by_id(o.id)
                 st = brain.status_str(o.status)
-                if st in ("filled",):
-                    fill = float(o.filled_avg_price)
-                    return o.id, "filled", fill
+                if st in ("filled", "partially_filled"):
+                    return o.id, "filled", float(o.filled_avg_price) if o.filled_avg_price else None
                 # Still open: cancel and let the escalation below wind up.
                 tried_ids.append(o.id)
                 brain.log_execution(symbol, "buy", lim_pct,
@@ -92,7 +92,11 @@ def smart_buy(symbol, notional, ref_price):
             qty=qty))
         time.sleep(5)
         o = client.get_order_by_id(o.id)
-        return o.id, brain.status_str(o.status), float(o.filled_avg_price) if o.filled_avg_price else None
+        st = brain.status_str(o.status)
+        # partial fill is a WIN: take it, don't re-order the remainder
+        if st == "partially_filled":
+            st = "filled"
+        return o.id, st, float(o.filled_avg_price) if o.filled_avg_price else None
     except Exception as e:
         return None, "error", None
 
@@ -104,7 +108,11 @@ def smart_sell(symbol, qty, ref_price):
             symbol=symbol, side=OrderSide.SELL, time_in_force=tif, qty=float(qty)))
         time.sleep(5)
         o = client.get_order_by_id(o.id)
-        return o.id, brain.status_str(o.status), float(o.filled_avg_price) if o.filled_avg_price else None
+        st = brain.status_str(o.status)
+        # partial fill is a WIN: take it, don't re-order the remainder
+        if st == "partially_filled":
+            st = "filled"
+        return o.id, st, float(o.filled_avg_price) if o.filled_avg_price else None
     except Exception as e:
         return None, "error", None
 

@@ -271,8 +271,9 @@ def _await_fill(order):
     while time.time() < deadline:
         o = client.get_order_by_id(order.id)
         st = brain.status_str(o.status)
-        if st in ("filled", "canceled", "expired", "rejected"):
-            return st, getattr(o, "filled_avg_price", None)
+        if st in ("filled", "partially_filled", "canceled", "expired", "rejected"):
+            # partial fill is a WIN: take it, don't escalate (would double-buy)
+            return ("filled" if st == "partially_filled" else st), getattr(o, "filled_avg_price", None)
         if st in ("accepted", "new", "pending_new"):
             elapsed = time.time() - (deadline - 90)
             if elapsed > 30:
