@@ -153,9 +153,6 @@ def load_verdict():
         conn = brain.init_db()
         days = conn.execute(
             "SELECT date FROM equity_history ORDER BY date DESC LIMIT 14").fetchall()
-        fw = conn.execute(
-            "SELECT COUNT(*), AVG(pnl_pct) FROM trade_pnl "
-            "WHERE strategy LIKE '%flag%' OR strategy LIKE '%orb%'").fetchone()
         conn.close()
         prev = None
         gaps = []
@@ -168,12 +165,26 @@ def load_verdict():
                 gaps.append((prev - t).total_seconds() / 3600)
             prev = t
         stable = bool(gaps) and max(gaps) <= 60
-        fw_n, fw_avg = (fw or (0, None))
-        fw_ok = bool(fw_n and fw_n >= 15 and (fw_avg or 0) >= 0.25)
-        avg_s = f"{fw_avg:+.2f}%" if fw_avg is not None else "—"
-        return {"stable": stable, "fw_ok": fw_ok, "fw_label": f"{fw_n or 0} trades / avg {avg_s}"}
+        fw = brain.framework_stats("clean")
+        fw_n, fw_avg = fw["n"], fw["avg"]
+        fw_ok = bool(fw_n >= 15 and fw_avg >= 0.25)
+        avg_s = f"{fw_avg:+.2f}%" if fw_n else "—"
+        return {"stable": stable, "fw_ok": fw_ok, "fw_label": f"{fw_n} trades / avg {avg_s}"}
     except Exception:
         return {"stable": False, "fw_ok": False, "fw_label": "n/a"}
+
+
+def load_cohort_ledger():
+    """Expectancy ledger over trade_pnl (clean/full/by_tag). Read-only."""
+    try:
+        conn = brain.init_db()
+        rows = conn.execute("SELECT strategy, tags, pnl_pct FROM trade_pnl").fetchall()
+        conn.close()
+        return brain.expectancy_ledger(rows)
+    except Exception:
+        return {"clean": {"n": 0, "avg": 0.0, "sum": 0.0},
+                "full": {"n": 0, "avg": 0.0, "sum": 0.0},
+                "by_tag": {}}
 
 
 def build_html():
@@ -247,6 +258,20 @@ def build_html():
                      ("Readiness ≥ 85/100", r_ok)))
     verdict_ok = ver["stable"] and dd_ok and ver["fw_ok"] and r_ok
 
+    led = load_cohort_ledger()
+    ledger_rows = (
+        "<tr><td>clean (untagged)</td><td>{}</td><td {}>{:+.2f}%</td><td>{:+.2f}%</td></tr>"
+        "<tr><td>full (all framework)</td><td>{}</td><td {}>{:+.2f}%</td><td>{:+.2f}%</td></tr>"
+    ).format(
+        led["clean"]["n"], _pos_td(led["clean"]["avg"]),
+        led["clean"]["avg"], led["clean"]["sum"],
+        led["full"]["n"], _pos_td(led["full"]["avg"]),
+        led["full"]["avg"], led["full"]["sum"])
+    for tag, st in led["by_tag"].items():
+        ledger_rows += (
+            "<tr><td>+{}</td><td>{}</td><td {}>{:+.2f}%</td><td>{:+.2f}%</td></tr>"
+        ).format(tag, st["n"], _pos_td(st["avg"]), st["avg"], st["sum"])
+
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>AI Trading Robot — Dashboard</title>
 <meta http-equiv="refresh" content="300">
@@ -289,6 +314,8 @@ li {{ margin:4px 0; color:#cbd5e1; }}
 <table><tr><th>Market</th><th>Strategy</th><th>Test score</th><th>Checked</th></tr>{champ_rows}</table>
 <h2>October verdict gate <span class="small">(framework live: {ver['fw_label']})</span></h2>
 <table><tr><th>Gate</th><th>Status</th></tr>{ver_rows}</table>
+<h2>Expectancy ledger <span class="small">(which gates buy the bot's losers)</span></h2>
+<table><tr><th>Cohort</th><th>n</th><th>avg</th><th>sum</th></tr>{ledger_rows}</table>
 <h2>Sector concentration <span class="small">(SECTOR_CAP {brain.SECTOR_CAP*100:.0f}%)</span></h2>
 <table><tr><th>Sector</th><th>Markets</th><th>Count</th><th>Share</th></tr>{sector_rows}</table>
 <p class="small">tech share {tech_pct:.0f}% of {sector_total} markets in universe (SECTOR_CAP {brain.SECTOR_CAP*100:.0f}% applies to deployed capital, enforced live)</p>

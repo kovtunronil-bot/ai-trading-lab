@@ -54,6 +54,15 @@ def breaker_entries_allowed(level):
 
 def breaker_entry_mult(level):
     return 0.5 if level == "CAUTION" else 1.0
+
+
+def gate_decision(gate_name, would_block, relaxed, tags=None):
+    tags = [t for t in (tags or [])]
+    if not would_block:
+        return True, tags
+    if relaxed:
+        return True, tags + [gate_name]
+    return False, tags
 PORTFOLIO_HEAT_CAP = 0.85
 TRAIL_ACTIVATE = 0.03
 TRAIL_GIVEBACK = 0.05
@@ -161,6 +170,14 @@ def init_db():
     c.execute("""CREATE TABLE IF NOT EXISTS trade_pnl(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ts TEXT, symbol TEXT, strategy TEXT, pnl_pct REAL)""")
+    try:
+        c.execute("ALTER TABLE trades ADD COLUMN tags TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE trade_pnl ADD COLUMN tags TEXT")
+    except sqlite3.OperationalError:
+        pass
     c.execute("""CREATE TABLE IF NOT EXISTS execution_log(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ts TEXT, symbol TEXT, side TEXT, limit_pct REAL,
@@ -222,7 +239,7 @@ def pop_position_strategy(symbol):
     return row[0] if row else None
 
 
-def log_closed_trade(symbol, strategy, entry, exit_price):
+def log_closed_trade(symbol, strategy, entry, exit_price, tags=None):
     try:
         if not strategy:
             cfg = load_config(symbol)
@@ -231,8 +248,15 @@ def log_closed_trade(symbol, strategy, entry, exit_price):
             return
         pnl = round((float(exit_price) / float(entry) - 1) * 100, 3)
         conn = init_db()
-        conn.execute("INSERT INTO trade_pnl(ts,symbol,strategy,pnl_pct) VALUES(?,?,?,?)",
-                     (datetime.now().isoformat(timespec="seconds"), symbol, strategy, pnl))
+        if tags is None:
+            row = conn.execute("""SELECT tags FROM trades
+                                  WHERE symbol=? AND UPPER(side)='BUY'
+                                  AND fill_price IS NOT NULL
+                                  ORDER BY id DESC LIMIT 1""",
+                               (symbol,)).fetchone()
+            tags = (row[0] if row and row[0] else "") or ""
+        conn.execute("INSERT INTO trade_pnl(ts,symbol,strategy,pnl_pct,tags) VALUES(?,?,?,?,?)",
+                     (datetime.now().isoformat(timespec="seconds"), symbol, strategy, pnl, tags))
         conn.commit()
         conn.close()
     except Exception:
@@ -253,6 +277,76 @@ def live_penalty(label):
     if s and s["avg_pnl"] < 0:
         return -1.5
     return 0.0
+
+
+FRAMEWORK_STRATEGIES = (
+    "Momentum Flag Pullback",
+    "Flag Pattern Fade (Flag FW)",
+    "Bank of America (BAC Flag FW)",
+    "Johnson & Johnson (JNJ Flag FW)",
+)
+
+
+def is_framework_strategy(name):
+    n = (name or "").upper()
+    if not n:
+        return False
+    if name in FRAMEWORK_STRATEGIES:
+        return True
+    return "FW" in n or "FLAG" in n or "ORB FW" in n
+
+
+def _agg_bucket(rows):
+    pnls = [float(p) for _, _, p in rows if p is not None]
+    return {"n": len(rows),
+            "avg": round(sum(pnls) / len(pnls), 3) if pnls else 0.0,
+            "sum": round(sum(pnls), 3)}
+
+
+def expectancy_ledger(rows):
+    full, clean, by_tag = [], [], {}
+    for strategy, tags, pnl in rows:
+        if not is_framework_strategy(strategy):
+            continue
+        full.append((strategy, tags, pnl))
+        tokens = [t for t in (tags or "").split(",") if t]
+        if not tokens:
+            clean.append((strategy, tags, pnl))
+        for t in tokens:
+            by_tag.setdefault(t, []).append((strategy, tags, pnl))
+    return {"clean": _agg_bucket(clean),
+            "full": _agg_bucket(full),
+            "by_tag": {t: _agg_bucket(v) for t, v in sorted(by_tag.items())}}
+
+
+def framework_stats(cohort="clean"):
+    conn = init_db()
+    rows = conn.execute("SELECT strategy, tags, pnl_pct FROM trade_pnl").fetchall()
+    conn.close()
+    ledger = expectancy_ledger(rows)
+    if cohort == "by_tag":
+        return ledger["by_tag"]
+    return ledger.get(cohort, ledger["full"])
+
+
+def pruning_recommendations(ledger, min_n=3):
+    clean = ledger.get("clean") or {}
+    out = []
+    for tag, st in ledger.get("by_tag", {}).items():
+        if st["n"] < min_n:
+            out.append(f"{tag}: n={st['n']} - insufficient evidence yet (need {min_n})")
+            continue
+        if clean.get("n", 0) == 0:
+            out.append(f"{tag}: no clean baseline yet")
+            continue
+        ca = clean["avg"]
+        if st["avg"] < ca - 0.5:
+            out.append(f"{tag}: avg {st['avg']:+.2f}% vs clean {ca:+.2f}% - gate provides protection (keep)")
+        elif st["avg"] >= ca:
+            out.append(f"{tag}: avg {st['avg']:+.2f}% >= clean {ca:+.2f}% - gate costs n without protection; review for live relaxation")
+        else:
+            out.append(f"{tag}: avg {st['avg']:+.2f}% vs clean {ca:+.2f}% - borderline, needs more n")
+    return out
 
 
 def log_execution(symbol, side, limit_pct, time_seconds, result):
@@ -3129,7 +3223,7 @@ def log_journal(symbol, price, action, detail, equity):
 
 
 def log_trade(ts, symbol, side, notional, qty, limit_price, status, algo,
-              fill_price=None, signal_price=None, strategy=None):
+              fill_price=None, signal_price=None, strategy=None, tags=""):
     conn = init_db()
     slippage_bps = None
     try:
@@ -3138,12 +3232,13 @@ def log_trade(ts, symbol, side, notional, qty, limit_price, status, algo,
             slippage_bps = round((float(fill_price) / float(signal_price) - 1) * 10000 * direction, 1)
     except (TypeError, ValueError):
         pass
-    conn.execute("""INSERT INTO trades(ts,symbol,side,notional,qty,limit_price,fill_price,status,algo,slippage_bps,strategy,signal_price)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+    conn.execute("""INSERT INTO trades(ts,symbol,side,notional,qty,limit_price,fill_price,status,algo,slippage_bps,strategy,signal_price,tags)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                  (ts, symbol, side, notional, qty, limit_price,
                   round(float(fill_price), 4) if fill_price else None,
                   status, algo, slippage_bps, strategy,
-                  round(float(signal_price), 4) if signal_price else None))
+                  round(float(signal_price), 4) if signal_price else None,
+                  tags or ""))
     conn.commit()
     conn.close()
 

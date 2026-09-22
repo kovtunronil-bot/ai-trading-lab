@@ -11,6 +11,22 @@ from datetime import datetime
 import brain
 
 
+def _print_cohort_ledger(conn):
+    import brain as _brain
+    rows = conn.execute("SELECT strategy, tags, pnl_pct FROM trade_pnl").fetchall()
+    ledger = _brain.expectancy_ledger(rows)
+    print("      -- expectancy ledger (framework trades) --")
+    print(f"         clean n={ledger['clean']['n']} avg={ledger['clean']['avg']:+.2f}% sum={ledger['clean']['sum']:+.2f}%")
+    print(f"         full  n={ledger['full']['n']} avg={ledger['full']['avg']:+.2f}% sum={ledger['full']['sum']:+.2f}%")
+    for tag, st in ledger["by_tag"].items():
+        print(f"         +{tag}: n={st['n']} avg={st['avg']:+.2f}% sum={st['sum']:+.2f}%")
+    recs = _brain.pruning_recommendations(ledger)
+    if recs:
+        print("      -- gate pruning review --")
+        for r in recs:
+            print(f"         {r}")
+
+
 def main():
     print("=== AI TRADING ROBOT — WEEKLY HONEST REPORT ===")
     print("generated:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "\n")
@@ -87,13 +103,14 @@ def main():
             "SELECT symbol, strategy, ROUND(pnl_pct,2), ts FROM trade_pnl "
             "WHERE strategy LIKE '%flag%' OR strategy LIKE '%orb%' "
             "ORDER BY ts ASC LIMIT 12").fetchall()
-        conn.close()
         if rows:
             print("[5] FRAMEWORK FIRST CLOSED TRADES")
             for sym, strat, pnl, ts in rows:
                 print(f"      {sym:<9} {strat:<22} {pnl:+.2f}%  ({ts})")
         else:
             print("[5] FRAMEWORK      no framework closed trades yet — waiting for first exits")
+        _print_cohort_ledger(conn)
+        conn.close()
     except Exception as e:
         print("[5] FRAMEWORK   ERR", e)
     print()
@@ -124,13 +141,14 @@ def main():
         bound = float(df["drawdown_pct"].iloc[-1]) >= -12 if not df.empty else False
         gates["Drawdown >= -12%"] = bound
 
-        # G3 FRAMEWORK: first framework trades prove positive expectancy.
-        fw = conn.execute(
-            "SELECT COUNT(*), AVG(pnl_pct) FROM trade_pnl "
-            "WHERE strategy LIKE '%flag%' OR strategy LIKE '%orb%'").fetchone()
-        fw_n, fw_avg = (fw or (0, None))
-        fw_ok = bool(fw_n and fw_n >= 15 and (fw_avg or 0) >= 0.25)
-        gates["Framework trades n>=15 avg>=+0.25%"] = fw_ok
+        # G3 FRAMEWORK: framework trades with positive expectancy under the
+        # LIVE gate set ('clean' cohort = untagged trades) prove the edge that
+        # real money would actually trade.
+        import brain as _brain
+        fw = _brain.framework_stats("clean")
+        fw_n, fw_avg = fw["n"], fw["avg"]
+        fw_ok = bool(fw_n >= 15 and fw_avg >= 0.25)
+        gates["Framework clean n>=15 avg>=+0.25%"] = fw_ok
 
         # G4 READINESS.
         ready = float(r["score"]) >= 85

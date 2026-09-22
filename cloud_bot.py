@@ -21,6 +21,7 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 
 API_KEY = os.environ.get("APCA_API_KEY_ID", "")
 SECRET_KEY = os.environ.get("APCA_API_SECRET_KEY", "")
+PAPER_RELAXED = os.environ.get("PAPER_RELAXED", "") == "1"
 if not API_KEY:
     from keys import API_KEY, SECRET_KEY
 
@@ -639,22 +640,30 @@ def run_cloud():
                 size_mult = brain.breaker_entry_mult(breaker_level)
                 if breaker_level == "CAUTION":
                     print(f"  {symbol}: CAUTION half-size entry (DD {drawdown*100:.1f}%)")
+                entry_tags = []
                 # L2: regime filter for framework longs — block in hard regimes,
                 # halve size when the portfolio is deep in drawdown.
                 if fw_mode and fw_ready:
                     _fg = brain.framework_regime_gate(live_regime, drawdown)
                     if _fg == "block":
-                        action, detail = "REGIME-BLOCKED", f"{live_regime} blocks framework entries"
-                        print(f"  {symbol}: REGIME-BLOCKED ({live_regime})")
+                        _ok, entry_tags = brain.gate_decision(
+                            f"hard_regime:{live_regime}", True, PAPER_RELAXED, entry_tags)
+                        if not _ok:
+                            action, detail = "REGIME-BLOCKED", f"{live_regime} blocks framework entries"
+                            print(f"  {symbol}: REGIME-BLOCKED ({live_regime})")
                     elif _fg == "downsize":
                         size_mult = 0.5
                         print(f"  {symbol}: framework entry at 50% size (DD {drawdown*100:.1f}%)")
+                _mom_fire = (not fw_mode and recent_mom < -0.03)
                 if brain.strategy_is_failing(symbol):
                     action, detail = "FAILING-STRATEGY-BLOCKED", "trained loser — skip entry"
                     print(f"  {symbol}: blocked — strategy {cfg.get('label')} has proven losing odds")
-                elif not fw_mode and recent_mom < -0.03:
+                elif _mom_fire and not PAPER_RELAXED:
                     action, detail = "MOMENTUM-BLOCKED", f"price dropped {recent_mom*100:+.1f}%"
                 else:
+                    if _mom_fire:
+                        entry_tags = brain.gate_decision(
+                            "momentum", True, PAPER_RELAXED, entry_tags)[1]
                     # Entry-quality gates: fundamental health, volume, liquidity.
                     f_blocked, f_detail = brain.fundamental_gate(symbol, df)
                     v_blocked, _vd = brain.volume_confirm_gate(df)
@@ -674,14 +683,20 @@ def run_cloud():
                             if _heat_room <= equity * 0.005:
                                 # Heat budget fully consumed: entering even the
                                 # $200 floor would bust the portfolio heat cap.
-                                action, detail = "HEAT-BLOCKED", f"{hc*100:.0f}% cap consumed"
-                                print(f">>> HEAT-BLOCKED {symbol}: no room under {hc*100:.0f}% cap ({live_regime})")
+                                _ok, entry_tags = brain.gate_decision(
+                                    "heat", True, PAPER_RELAXED, entry_tags)
+                                if not _ok:
+                                    action, detail = "HEAT-BLOCKED", f"{hc*100:.0f}% cap consumed"
+                                    print(f">>> HEAT-BLOCKED {symbol}: no room under {hc*100:.0f}% cap ({live_regime})")
                             else:
                                 size_mult = min(size_mult, max(0.0, _heat_room / max(sized_notional, 1)))
                                 print(f">>> HEAT: sizing down {size_mult:.0%} to respect {hc*100:.0f}% cap ({live_regime})")
                         if conviction < brain.FREE_SAIL_CONVICTION:
                             if conviction < brain.MIN_CONVICTION:
-                                action, detail = "LOW-CONVICTION", f"{conviction:.0%} < {brain.MIN_CONVICTION:.0%}"
+                                _ok, entry_tags = brain.gate_decision(
+                                    "low_conv", True, PAPER_RELAXED, entry_tags)
+                                if not _ok:
+                                    action, detail = "LOW-CONVICTION", f"{conviction:.0%} < {brain.MIN_CONVICTION:.0%}"
                             else:
                                 size_mult = min(size_mult, 0.6)
                                 print(f">>> Conviction {conviction:.0%}: scaling down to 60%")
@@ -699,7 +714,10 @@ def run_cloud():
                                 pat = brain.hash_pattern(df, live_regime)
                                 hist = brain.check_pattern_memory(symbol, pat)
                                 if hist is not None and hist < -2:
-                                    action, detail = "PATTERN-MEM", f"similar setups averaged {hist:+.1f}%"
+                                    _ok, entry_tags = brain.gate_decision(
+                                        "patmem", True, PAPER_RELAXED, entry_tags)
+                                    if not _ok:
+                                        action, detail = "PATTERN-MEM", f"similar setups averaged {hist:+.1f}%"
                                 elif hist is not None:
                                     # Learned size boost: this exact pattern already
                                     # WON/WON-lost money in the past -> size accordingly.
@@ -723,7 +741,10 @@ def run_cloud():
                         try:
                             gate = brain.correlation_gate(closes, symbol, held_symbols)
                             if gate["blocked"]:
-                                action, detail = "CORR-BLOCKED", f"{gate['alike']} held assets >70% correlated"
+                                _ok, entry_tags = brain.gate_decision(
+                                    "corr", True, PAPER_RELAXED, entry_tags)
+                                if not _ok:
+                                    action, detail = "CORR-BLOCKED", f"{gate['alike']} held assets >70% correlated"
                             elif gate["alike"] == 1:
                                 conviction = max(0.0, conviction - 0.15)
                                 sized_notional = max(200, planned_notional * conviction * size_mult)
@@ -746,7 +767,10 @@ def run_cloud():
                             except Exception:
                                 verdict, reason = "NEUTRAL", ""
                         if verdict == "BEARISH":
-                            action, detail = "NEWS-BLOCKED", reason[:60]
+                            _ok, entry_tags = brain.gate_decision(
+                                "news", True, PAPER_RELAXED, entry_tags)
+                            if not _ok:
+                                action, detail = "NEWS-BLOCKED", reason[:60]
 
                     if action == "WAIT":
                         # Framework strategies: the risk-based size is the
@@ -755,6 +779,7 @@ def run_cloud():
                         if fw_size is not None:
                             sized_notional = max(200, int(fw_size * size_mult))
                         oid, st, fill_price = smart_buy(symbol, sized_notional, price)
+                        _tags_str = ",".join(entry_tags)
                         if st == "filled" and fill_price:
                             brain.set_position_strategy(symbol, cfg.get("label", "?"))
                             if fw_mode and fw_size is not None:
@@ -767,11 +792,11 @@ def run_cloud():
                                 if _fc:
                                     _fc["symbol"] = symbol
                                     brain.save_config(_fc)
-                            action, detail = "BUY", f"${sized_notional:,.0f} conv={conviction:.0%}"
+                            action, detail = "BUY", f"${sized_notional:,.0f} conv={conviction:.0%}" + (f" tags={_tags_str}" if _tags_str else "")
                             brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "BUY",
                                             sized_notional, None, None, st, "smart-limit",
                                             fill_price=fill_price, signal_price=price,
-                                            strategy=cfg.get("label", "?"))
+                                            strategy=cfg.get("label", "?"), tags=_tags_str)
                             deployed += sized_notional
                         else:
                             # not filled yet — record intent (fill_price=None) so a
@@ -780,7 +805,7 @@ def run_cloud():
                             brain.log_trade(datetime.now().isoformat(timespec="seconds"), symbol, "BUY",
                                             sized_notional, None, None, st or "queued", "smart-limit",
                                             fill_price=None, signal_price=price,
-                                            strategy=cfg.get("label", "?"))
+                                            strategy=cfg.get("label", "?"), tags=_tags_str)
 
             elif holding is not None and brain.is_exit_signal(df, cfg) and cfg.get("mode") != "hold":
                 if symbol not in brain.CRYPTO and not market_open:
