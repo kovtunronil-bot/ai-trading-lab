@@ -270,7 +270,7 @@ def _await_fill(order):
     deadline = time.time() + 90
     while time.time() < deadline:
         o = client.get_order_by_id(order.id)
-        st = str(o.status)
+        st = brain.status_str(o.status)
         if st in ("filled", "canceled", "expired", "rejected"):
             return st, getattr(o, "filled_avg_price", None)
         if st in ("accepted", "new", "pending_new"):

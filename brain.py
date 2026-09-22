@@ -37,6 +37,16 @@ def internal_sym(alpaca_symbol):
         if alpaca_sym(k) == alpaca_symbol.replace("/", "").replace("-", ""):
             return k
     return alpaca_symbol
+
+
+def status_str(status):
+    """OrderStatus on py3.11+ str()s as 'OrderStatus.FILLED', not 'filled'
+    (Python changed Enum str() semantics). Normalize via .value so bots' status
+    comparisons work across Python versions."""
+    v = getattr(status, "value", None)
+    return str(v) if v is not None else str(status)
+
+
 ALL = SYMBOLS + list(CRYPTO.keys())
 CAPITAL = 100000.0
 JOURNAL_FILE = "journal.csv"
