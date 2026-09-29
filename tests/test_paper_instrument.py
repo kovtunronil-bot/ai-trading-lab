@@ -237,5 +237,104 @@ class CohortStatsTest(unittest.TestCase):
                                                         "by_tag": {}}), [])
 
 
+class CloudBotOrderConfirmTest(unittest.TestCase):
+    """Regression: cloud_bot must confirm orders via alpaca-py's real SDK
+    method get_order_by_id (get_order does not exist on TradingClient)."""
+
+    import types
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("APCA_API_KEY_ID", "test-key-id")
+        os.environ.setdefault("APCA_API_SECRET_KEY", "test-secret-key")
+        import cloud_bot
+        from alpaca.trading.enums import OrderStatus
+        cls.cb = cloud_bot
+        cls.OrderStatus = OrderStatus
+
+    def setUp(self):
+        calls = []
+        OS = CloudBotOrderConfirmTest.OrderStatus
+
+        class FakeClient:
+            def __init__(self, avg_price=100.0):
+                self.status = OS.FILLED
+                self.avg_price = avg_price
+
+            def submit_order(self, req, *a, **k):
+                calls.append("submit_order:" + type(req).__name__)
+                return CloudBotOrderConfirmTest.types.SimpleNamespace(
+                    id="o1", status=OS.ACCEPTED)
+
+            def get_order_by_id(self, oid):
+                calls.append("get_order_by_id")
+                return CloudBotOrderConfirmTest.types.SimpleNamespace(
+                    id=oid, status=self.status, filled_avg_price=self.avg_price)
+
+        self.calls = calls
+        self._orig_client = CloudBotOrderConfirmTest.cb.client
+        self._orig_sleep = CloudBotOrderConfirmTest.cb.time.sleep
+        self.fake = FakeClient()
+        CloudBotOrderConfirmTest.cb.client = self.fake
+        CloudBotOrderConfirmTest.cb.time.sleep = lambda *a, **k: None
+
+    def tearDown(self):
+        CloudBotOrderConfirmTest.cb.client = self._orig_client
+        CloudBotOrderConfirmTest.cb.time.sleep = self._orig_sleep
+
+    def test_smart_buy_confirms_via_get_order_by_id(self):
+        oid, st, fill = CloudBotOrderConfirmTest.cb.smart_buy("SPY", 1000.0, 500.0)
+        self.assertEqual(st, "filled")
+        self.assertEqual(fill, 100.0)
+        self.assertIn("get_order_by_id", self.calls)
+
+    def test_smart_sell_confirms_via_get_order_by_id(self):
+        oid, st, fill = CloudBotOrderConfirmTest.cb.smart_sell("SPY", 2.0, 500.0)
+        self.assertEqual(st, "filled")
+        self.assertEqual(fill, 100.0)
+        self.assertIn("get_order_by_id", self.calls)
+
+    def test_smart_buy_partial_fill_accepted_no_market_escalation(self):
+        # A partially-filled limit order is a WIN: take the partial at once.
+        # It must NOT fall through to a full-notional market escalation
+        # (that would double-buy on top of the filled portion).
+        self.fake.status = CloudBotOrderConfirmTest.OrderStatus.PARTIALLY_FILLED
+        oid, st, fill = CloudBotOrderConfirmTest.cb.smart_buy("SPY", 1000.0, 500.0)
+        self.assertEqual(st, "filled")
+        self.assertEqual(fill, 100.0)
+        self.assertFalse([c for c in self.calls if "MarketOrderRequest" in c],
+                         f"market escalation submitted: {self.calls}")
+
+    def test_smart_buy_partial_fill_without_avg_price_no_crash_no_escalation(self):
+        # A partially-filled order whose avg-price is still None (Alpaca
+        # bookkeeping race) must NOT raise into the cancel/escalate path.
+        self.fake.status = CloudBotOrderConfirmTest.OrderStatus.PARTIALLY_FILLED
+        self.fake.avg_price = None
+        oid, st, fill = CloudBotOrderConfirmTest.cb.smart_buy("SPY", 1000.0, 500.0)
+        self.assertEqual(st, "filled")
+        self.assertIsNone(fill)
+        self.assertFalse([c for c in self.calls if "MarketOrderRequest" in c],
+                         f"market escalation submitted: {self.calls}")
+
+
+class OrderStatusNormalizeTest(unittest.TestCase):
+    """str() of alpaca OrderStatus on py3.11+ is 'OrderStatus.FILLED', not
+    'filled'. brain.status_str must return the enum's .value so both bots'
+    string comparisons work across Python versions."""
+
+    def test_value_takes_priority_over_str(self):
+        from alpaca.trading.enums import OrderStatus
+        self.assertEqual(brain.status_str(OrderStatus.FILLED), "filled")
+        self.assertEqual(brain.status_str(OrderStatus.ACCEPTED), "accepted")
+        self.assertEqual(brain.status_str(OrderStatus.PENDING_NEW), "pending_new")
+
+    def test_plain_string_passthrough(self):
+        self.assertEqual(brain.status_str("filled"), "filled")
+        self.assertEqual(brain.status_str("accepted"), "accepted")
+
+    def test_none(self):
+        self.assertEqual(brain.status_str(None), "None")
+
+
 if __name__ == "__main__":
     unittest.main()
