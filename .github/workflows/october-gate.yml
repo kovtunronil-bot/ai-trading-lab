@@ -1,0 +1,41 @@
+name: October Gate Watcher
+
+# Daily read-only check that the October verdict gate has flipped to READY.
+# Runs october_gate.py against the committed lab.db and notifies via ntfy ONLY
+# when the verdict becomes READY (exit 0 on that day). PENDING days stay silent
+# so the human never has to think about it until it actually flips.
+
+on:
+  schedule:
+    - cron: '32 5 * * *'          # just after the daily strategy-scan slot
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install --quiet requests pandas numpy
+
+      - name: Run gate
+        id: gate
+        run: |
+          python october_gate.py && echo "verdict=READY" >> "$GITHUB_OUTPUT" || echo "verdict=PENDING" >> "$GITHUB_OUTPUT"
+
+      - name: Notify on flip
+        if: steps.gate.outputs.verdict == 'READY'
+        env:
+          NTFY_TOPIC: robot-mx7-bluefalcon-tv
+        run: |
+          curl -s -d "OCTOBER VERDICT READY — measured evidence supports real money. Check the weekly report." \
+            https://ntfy.sh/"$NTFY_TOPIC"
