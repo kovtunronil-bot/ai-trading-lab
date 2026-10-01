@@ -23,12 +23,14 @@ if len(sys.argv) > 1 and sys.argv[1] == "resume":
     brain.save_state(state)
     print("Circuit breakers CLEARED. Robot is back in business.")
 
-stale = [s for s in brain.ALL if brain.config_is_stale(brain.load_config(s))]
+stale = [s for s in brain.ALL if (cfg := brain.load_config(s)) and brain.config_is_stale(cfg)]
 if stale:
     brain.evolve_all(stale)
 else:
     for s in brain.ALL:
         cfg = brain.load_config(s)
+        if cfg is None:
+            continue
         print(f"Champion {s}: {cfg['label']} (score {cfg['test_score']}, checked {cfg['updated'][:10]})")
 print("=" * 56)
 
@@ -363,7 +365,7 @@ def smart_sell(symbol, qty, ref_price):
 actions = {}
 for symbol in brain.ALL:
     cfg = brain.load_config(symbol)
-    if symbol not in data:
+    if symbol not in data or cfg is None:
         continue
     df = data[symbol]
     close = df["Close"]

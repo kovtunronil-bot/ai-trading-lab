@@ -20,6 +20,13 @@ stricter gate is written back into its live config automatically:
     every other config field is left untouched.
 The promotion is announced on ntfy exactly like the bot announces trades, so
 every auto-change stays visible and auditable.
+
+NEW-SYMBOL DISCOVERY: symbols added to the tracked universe (brain.SYMBOLS)
+that have no config yet are tested against the full framework library. A new
+symbol is admitted only when a framework mode clears a strict ABSOLUTE bar on
+every window (4y Sharpe >= NEW_MIN_SHARPE, DD >= -25%, n >= 8; 3y positive;
+2y positive). With PROMOTE=1 the winner is written as a fresh config (regime
+deliberately omitted so the bot's regime-gate can never legacy-evolve it).
 """
 import warnings
 warnings.filterwarnings("ignore")
@@ -48,6 +55,7 @@ ENTRIES = {
 DD_FLOOR = -25.0
 MIN_TRADES = 8
 BEAT_BY = 1.05
+NEW_MIN_SHARPE = 1.0   # absolute 4y admission bar for brand-new symbols
 
 
 def _metrics(cfg, period):
@@ -106,13 +114,72 @@ def _promote_cfg(path, cfg, cand, cur, sym):
     return True
 
 
+def _discover_sym(sym):
+    """Best framework mode+entry for a symbol with no config yet.
+
+    Returns (mode, e, m4, m2, m3) of the highest-4y-sharpe candidate that
+    clears every window (4y: sharpe>=NEW_MIN_SHARPE, dd/trades floors;
+    3y: sharpe>0, dd/trades floors; 2y: sharpe>0), or None.
+    """
+    best = None
+    for mode in ALL_MODES:
+        for e in ENTRIES.get(mode, [20]):
+            cc = {"symbol": sym, "mode": mode, "entry": e}
+            m4 = _metrics(cc, "4y")
+            if not m4 or m4["sharpe"] < NEW_MIN_SHARPE or m4["dd"] < DD_FLOOR or m4["trades"] < MIN_TRADES:
+                continue
+            m2 = _metrics(cc, "2y")
+            if not m2 or m2["sharpe"] <= 0.0:
+                continue
+            m3 = _metrics(cc, "3y")
+            if not m3 or m3["sharpe"] <= 0.0 or m3["dd"] < DD_FLOOR or m3["trades"] < MIN_TRADES:
+                continue
+            cand = (mode, e, m4, m2, m3)
+            if best is None or m4["sharpe"] > best[2]["sharpe"]:
+                best = cand
+    return best
+
+
+def _admit_cfg(sym, best):
+    """Write a brand-new config for a discovered symbol. Regime is deliberately
+    omitted so the live bot's regime-gate can never auto-evolve it (it stays on
+    the measured scan pipeline)."""
+    mode, e, m4, m2, m3 = best
+    cfg = {
+        "mode": mode,
+        "entry": e,
+        "label": f"{mode} (scan-discovered)",
+        "symbol": sym,
+        "test_score": round(m4["sharpe"], 2),
+        "promoted": {
+            "from": "NEWSymbol",
+            "framework_sharpe": round(m4["sharpe"], 2),
+            "dd": round(m4["dd"], 1),
+            "sharpe_2y": round(m2["sharpe"], 2),
+            "sharpe_3y": round(m3["sharpe"], 2),
+            "updated": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+            "note": "scan-discovered: 4y/3y/2y validation + absolute Sharpe bar",
+        },
+        "updated": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+    }
+    with open(brain.config_path(sym), "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2)
+        fh.write("\n")
+    return cfg
+
+
 def main():
     promote = os.environ.get("PROMOTE", "0") == "1"
     out = []
     promoted = []
-    for f in sorted(glob.glob("config_*.json")):
+
+    seen = set()
+    for f in sorted(glob.glob(brain.config_path("*"))):
         cfg = json.load(open(f, encoding="utf-8"))
         sym = cfg.get("symbol")
+        if not sym:
+            continue
+        seen.add(sym)
         cur_mode = cfg.get("mode")
         cur = _metrics(cfg, "4y")
         if cur is None or cur["sharpe"] == 0.0:
@@ -149,9 +216,37 @@ def main():
             line += "  (no alt above bar)"
         print(line, flush=True)
         out.append(line)
+
+    # NEW-SYMBOL DISCOVERY: markets in the tracked universe with no config yet
+    # (added to brain.SYMBOLS for the bot to scan, waiting on measured proof).
+    # A symbol is admitted only when a framework mode clears every window at an
+    # absolute bar (4y/3y/2y). With PROMOTE=1 a winner is written as a fresh
+    # config; otherwise the radar reports it as an admit candidate.
+    for sym in [s for s in brain.ALL if s not in seen]:
+        best = _discover_sym(sym)
+        if best is None:
+            out.append(f"{sym:<8} NEW     (no framework mode above admit bar)")
+            print(f"{sym:<8} NEW     (no framework mode above admit bar)", flush=True)
+            continue
+        mode, e, m4, m2, m3 = best
+        line = (f"{sym:<8} ADMIT {mode} e={e}: S4y={m4['sharpe']:+.2f} "
+                f"DD4y={m4['dd']:+.1f}% S2y={m2['sharpe']:+.2f} S3y={m3['sharpe']:+.2f} n={m4['trades']}")
+        if promote:
+            _admit_cfg(sym, best)
+            line += "  -> WROTE config"
+            promoted.append(line)
+        out.append(line)
+        print(line, flush=True)
+
+    promotions = [l for l in promoted if "ADMIT" in l]
     upgrades = [l for l in out if "-> UPGRADE" in l]
     if promoted:
-        msg = "STRATEGY-SCAN | AUTO-PROMOTIONS applied:\n" + "\n".join(promoted)
+        parts = []
+        if upgrades:
+            parts.append("AUTO-PROMOTIONS applied:\n" + "\n".join(upgrades))
+        if promotions:
+            parts.append("NEW SYMBOLS admitted:\n" + "\n".join(promotions))
+        msg = "STRATEGY-SCAN | " + "\n\n".join(parts)
     elif upgrades:
         msg = "STRATEGY-SCAN | upgrades found (auto-gate: 3y not met, alert only):\n" + "\n".join(upgrades)
     else:

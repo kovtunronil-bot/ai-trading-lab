@@ -60,7 +60,7 @@ def run_upgrade_cycle():
 
     lessons = analyze_closed_trades()
     adjustments = auto_adjust_losing()
-    stale = [s for s in brain.ALL if brain.config_is_stale(brain.load_config(s))]
+    stale = [s for s in brain.ALL if (cfg := brain.load_config(s)) and brain.config_is_stale(cfg)]
     if stale:
         print(f"  evolving {len(stale)} stale configs")
         brain.evolve_all(stale)

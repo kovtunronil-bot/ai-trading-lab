@@ -9,7 +9,8 @@ import yfinance as yf
 
 SYMBOLS = ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "GLD",
            "AMD", "META", "GOOGL", "AMZN", "NFLX",
-           "CAT", "BAC", "COP", "JNJ", "KO", "SLV"]
+           "CAT", "BAC", "COP", "JNJ", "KO", "SLV",
+           "WMT", "PG", "XOM", "JPM", "V", "HD", "DIS", "INTC", "CSCO", "PFE"]
 CRYPTO = {"BTC/USD": "BTC-USD", "ETH/USD": "ETH-USD"}
 
 
@@ -83,15 +84,16 @@ FLAT_THRESHOLD = 0.005
 FLAT_MAX_DAYS = 15
 SECTOR_CAP = 0.40
 SECTORS = {
-    "tech": ["NVDA", "AMD", "MSFT", "GOOGL", "META", "AMZN", "NFLX", "AAPL", "TSLA"],
+    "tech": ["NVDA", "AMD", "MSFT", "GOOGL", "META", "AMZN", "NFLX", "AAPL", "TSLA", "INTC", "CSCO"],
     "broad": ["SPY", "QQQ"],
     "commodity": ["GLD", "SLV"],
     "crypto": ["BTC/USD", "ETH/USD"],
-    "financials": ["BAC"],
+    "financials": ["BAC", "JPM", "V"],
     "industrials": ["CAT"],
-    "energy": ["COP"],
-    "staples": ["KO"],
-    "healthcare": ["JNJ"],
+    "energy": ["COP", "XOM"],
+    "staples": ["KO", "PG", "WMT"],
+    "healthcare": ["JNJ", "PFE"],
+    "consumer": ["HD", "DIS"],
 }
 
 

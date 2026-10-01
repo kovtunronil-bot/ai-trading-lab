@@ -570,6 +570,12 @@ def run_cloud():
         close = df["Close"]
         price = float(close.iloc[-1])
 
+        if cfg is None:
+            # In the universe but never admitted by the strategy-scan (no
+            # measured winner yet). Never legacy-evolve it; wait for the scan.
+            print(f"  {symbol}: no config yet (scan-discovered lineups apply on admit)")
+            continue
+
         live_regime = brain.current_regime(df)
         if not brain.config_is_stale(cfg) and cfg.get("regime") and cfg.get("regime") != live_regime:
             brain.evolve_symbol(symbol, force_print=False, df=df)
