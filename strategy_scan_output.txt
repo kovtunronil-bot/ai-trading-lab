@@ -17,3 +17,13 @@ NVDA     flag_fw      S=+3.72 DD=-13.1%  (no alt above bar)
 QQQ      flag_fw      S=+2.69 DD=-14.5%  (no alt above bar)
 SLV      flag_fw      S=+5.80 DD=-10.3%  (best alt heikin_fw e=10: S4y=+1.16 DD4y=-20.7% — below bar)
 TSLA     orb_fw       S=+3.44 DD=-5.9%  (best alt flag_fw e=30: S4y=+2.30 DD4y=-14.2% — below bar)
+WMT      NEW     (no framework mode above admit bar)
+PG       NEW     (no framework mode above admit bar)
+XOM      NEW     (no framework mode above admit bar)
+JPM      ADMIT flag_fw e=30: S4y=+4.20 DD4y=-10.8% S2y=+0.81 S3y=+2.92 n=102  -> WROTE config
+V        ADMIT flag_fw e=30: S4y=+3.45 DD4y=-19.5% S2y=+0.52 S3y=+3.68 n=96  -> WROTE config
+HD       ADMIT flag_fw e=30: S4y=+3.02 DD4y=-10.7% S2y=+1.02 S3y=+4.28 n=107  -> WROTE config
+DIS      NEW     (no framework mode above admit bar)
+INTC     NEW     (no framework mode above admit bar)
+CSCO     ADMIT flag_fw e=30: S4y=+4.38 DD4y=-9.3% S2y=+5.01 S3y=+4.45 n=123  -> WROTE config
+PFE      ADMIT flag_fw e=30: S4y=+2.53 DD4y=-14.9% S2y=+2.67 S3y=+2.81 n=98  -> WROTE config

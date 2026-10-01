@@ -1,0 +1,17 @@
+{
+  "mode": "flag_fw",
+  "entry": 30,
+  "label": "flag_fw (scan-discovered)",
+  "symbol": "HD",
+  "test_score": 3.02,
+  "promoted": {
+    "from": "NEWSymbol",
+    "framework_sharpe": 3.02,
+    "dd": -10.7,
+    "sharpe_2y": 1.02,
+    "sharpe_3y": 4.28,
+    "updated": "2026-10-01T12:36:30",
+    "note": "scan-discovered: 4y/3y/2y validation + absolute Sharpe bar"
+  },
+  "updated": "2026-10-01T12:36:30"
+}

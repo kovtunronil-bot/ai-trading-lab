@@ -1,0 +1,17 @@
+{
+  "mode": "flag_fw",
+  "entry": 30,
+  "label": "flag_fw (scan-discovered)",
+  "symbol": "CSCO",
+  "test_score": 4.38,
+  "promoted": {
+    "from": "NEWSymbol",
+    "framework_sharpe": 4.38,
+    "dd": -9.3,
+    "sharpe_2y": 5.01,
+    "sharpe_3y": 4.45,
+    "updated": "2026-10-01T12:36:49",
+    "note": "scan-discovered: 4y/3y/2y validation + absolute Sharpe bar"
+  },
+  "updated": "2026-10-01T12:36:49"
+}

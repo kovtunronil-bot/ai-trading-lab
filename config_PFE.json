@@ -1,0 +1,17 @@
+{
+  "mode": "flag_fw",
+  "entry": 30,
+  "label": "flag_fw (scan-discovered)",
+  "symbol": "PFE",
+  "test_score": 2.53,
+  "promoted": {
+    "from": "NEWSymbol",
+    "framework_sharpe": 2.53,
+    "dd": -14.9,
+    "sharpe_2y": 2.67,
+    "sharpe_3y": 2.81,
+    "updated": "2026-10-01T12:36:57",
+    "note": "scan-discovered: 4y/3y/2y validation + absolute Sharpe bar"
+  },
+  "updated": "2026-10-01T12:36:57"
+}

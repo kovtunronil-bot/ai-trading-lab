@@ -1,0 +1,17 @@
+{
+  "mode": "flag_fw",
+  "entry": 30,
+  "label": "flag_fw (scan-discovered)",
+  "symbol": "V",
+  "test_score": 3.45,
+  "promoted": {
+    "from": "NEWSymbol",
+    "framework_sharpe": 3.45,
+    "dd": -19.5,
+    "sharpe_2y": 0.52,
+    "sharpe_3y": 3.68,
+    "updated": "2026-10-01T12:36:21",
+    "note": "scan-discovered: 4y/3y/2y validation + absolute Sharpe bar"
+  },
+  "updated": "2026-10-01T12:36:21"
+}

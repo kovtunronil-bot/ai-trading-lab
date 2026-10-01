@@ -1,0 +1,17 @@
+{
+  "mode": "flag_fw",
+  "entry": 30,
+  "label": "flag_fw (scan-discovered)",
+  "symbol": "JPM",
+  "test_score": 4.2,
+  "promoted": {
+    "from": "NEWSymbol",
+    "framework_sharpe": 4.2,
+    "dd": -10.8,
+    "sharpe_2y": 0.81,
+    "sharpe_3y": 2.92,
+    "updated": "2026-10-01T12:36:13",
+    "note": "scan-discovered: 4y/3y/2y validation + absolute Sharpe bar"
+  },
+  "updated": "2026-10-01T12:36:13"
+}
