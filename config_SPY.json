@@ -1,9 +1,9 @@
 {
-  "mode": "vwap_rev_fw",
-  "label": "VWAP Reversion",
+  "mode": "flag_fw",
+  "label": "flag_fw (auto-promotion)",
   "symbol": "SPY",
   "regime": "QUIET_RANGE",
-  "test_score": 2.56856,
+  "test_score": 3.88,
   "hold_test_score": -99.0,
   "adaptive": {
     "rsi_buy": 20,
@@ -13,5 +13,16 @@
     "atr_mult": 0.75,
     "note": "low-vol: tighter thresholds"
   },
-  "updated": "2026-09-06T01:21:57"
+  "updated": "2026-10-05T23:03:38",
+  "entry": 30,
+  "promoted": {
+    "from": "vwap_rev_fw",
+    "from_sharpe": -8.33,
+    "framework_sharpe": 3.88,
+    "dd": -13.8,
+    "sharpe_2y": 1.16,
+    "sharpe_3y": 5.36,
+    "updated": "2026-10-05T23:03:38",
+    "note": "auto-promotion: 4y/3y/2y validation + Sharpe>1.05x bar"
+  }
 }
