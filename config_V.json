@@ -13,5 +13,8 @@
     "updated": "2026-10-01T12:36:21",
     "note": "scan-discovered: 4y/3y/2y validation + absolute Sharpe bar"
   },
-  "updated": "2026-10-01T12:36:21"
+  "updated": "2026-10-01T12:36:21",
+  "fw_entry": 371.43,
+  "fw_sl": 356.11,
+  "fw_tp": 382.05
 }
