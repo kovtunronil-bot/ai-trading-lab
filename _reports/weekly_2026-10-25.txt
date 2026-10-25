@@ -1,0 +1,59 @@
+=== AI TRADING ROBOT — WEEKLY HONEST REPORT ===
+generated: 2026-10-25 10:25:31 
+
+[1] EQUITY      $91,699.14
+    PEAK        $100,000.00
+    DRAWDOWN    -8.3%
+
+[2] CLOSED TRADES  287   cum P&L +748.13%
+    per strategy:
+      ATRbrk 55d x1.0            n=  15  avg=+20.57%  sum=+308.57%
+      Stoch14 <20/>80            n=  39  avg=+3.68%  sum=+143.38%
+      Momentum 6m                n=  57  avg=+1.26%  sum=+71.59%
+      RSI2 <5/60                 n=  37  avg=+1.81%  sum=+66.86%
+      ADX>20 trend-on            n=  30  avg=+2.21%  sum=+66.27%
+      Bollinger dip              n=  18  avg=+2.28%  sum=+41.09%
+      RSI4 <20/60                n=  28  avg=+1.38%  sum=+38.58%
+      EMA9/21                    n=  22  avg=+1.44%  sum=+31.66%
+      ATRbrk 30d x0.5            n=  12  avg=+2.17%  sum=+26.08%
+      flag_fw (scan-discovered)  n=   4  avg=+3.24%  sum=+12.95%
+      Coca-Cola (KO Flag FW)     n=   1  avg=+5.81%  sum=+5.81%
+      EMA20/50                   n=   1  avg=-0.38%  sum=-0.38%   <-- losing
+      Momentum Flag Pullback     n=  12  avg=-0.33%  sum=-3.90%   <-- losing
+      Johnson & Johnson (JNJ Flag FW) n=   1  avg=-4.86%  sum=-4.86%   <-- losing
+      Caterpillar (CAT Flag FW)  n=   1  avg=-6.20%  sum=-6.20%   <-- losing
+      RSI14 <25/55               n=   4  avg=-2.53%  sum=-10.10%   <-- losing
+      Bank of America (BAC Flag FW) n=   2  avg=-8.14%  sum=-16.28%   <-- losing
+      Flag Pattern Fade (Flag FW) n=   3  avg=-7.67%  sum=-23.01%   <-- losing
+
+[3] INTEGRITY  compile: OK
+    configs loaded: 25/25
+
+[4] READINESS  85.0/100
+
+[5] FRAMEWORK FIRST CLOSED TRADES
+      ETH/USD   Flag Pattern Fade (Flag FW) -8.24%  (2026-09-15T18:53:47)
+      BAC       Bank of America (BAC Flag FW) -8.28%  (2026-09-16T18:49:48)
+      META      Momentum Flag Pullback +8.96%  (2026-09-18T16:21:06)
+      BTC/USD   Momentum Flag Pullback +0.19%  (2026-09-21T13:59:36)
+      BTC/USD   Momentum Flag Pullback +0.36%  (2026-09-22T04:48:26)
+      JNJ       Johnson & Johnson (JNJ Flag FW) -4.86%  (2026-10-01T18:48:28)
+      CSCO      flag_fw (scan-discovered) +1.00%  (2026-10-02T14:56:58)
+      CSCO      flag_fw (scan-discovered) +3.07%  (2026-10-06T14:27:29)
+      QQQ       Momentum Flag Pullback +4.08%  (2026-10-06T14:27:29)
+      ETH/USD   Flag Pattern Fade (Flag FW) -4.07%  (2026-10-07T05:51:02)
+      AMZN      Momentum Flag Pullback -0.22%  (2026-10-07T14:40:39)
+      CAT       Caterpillar (CAT Flag FW) -6.20%  (2026-10-08T19:24:00)
+      -- expectancy ledger (framework trades) --
+         clean n=10 avg=-2.15% sum=-21.55%
+         full  n=24 avg=-1.48% sum=-35.48%
+         +heat: n=14 avg=-0.99% sum=-13.93%
+      -- gate pruning review --
+         heat: avg -0.99% >= clean -2.15% - gate costs n without protection; review for live relaxation
+
+[6] OCTOBER VERDICT GATE
+      [PASS]  Stability (no outage 14d)
+      [PASS]  Drawdown >= -12%
+      [PEND]  Framework clean n>=15 avg>=+0.25%
+      [PASS]  Readiness >= 85/100
+      VERDICT: PENDING — waiting for first framework exits (honest gate)
