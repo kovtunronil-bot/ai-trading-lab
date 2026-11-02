@@ -1,12 +1,12 @@
 {
-  "mode": "orb_fw",
-  "entry": 55,
+  "mode": "flag_fw",
+  "entry": 30,
   "exit": 27,
   "mult": 1.0,
-  "label": "Opening Range Breakout (ORB)",
+  "label": "flag_fw (auto-promotion)",
   "symbol": "GLD",
   "regime": "QUIET_RANGE",
-  "test_score": 11.770272000000002,
+  "test_score": 2.4,
   "hold_test_score": -4.003,
   "adaptive": {
     "rsi_buy": 24,
@@ -16,11 +16,15 @@
     "atr_mult": 1.0,
     "note": "normal-vol: standard"
   },
-  "updated": "2026-09-05T23:22:59",
+  "updated": "2026-11-02T23:46:29",
   "promoted": {
-    "from": "atr_breakout",
-    "mode": "orb_fw",
-    "framework_sharpe": 4.2,
-    "note": "Sharpe-driven promotion from framework backtest"
+    "from": "orb_fw",
+    "from_sharpe": 2.17,
+    "framework_sharpe": 2.4,
+    "dd": -12.0,
+    "sharpe_2y": 3.14,
+    "sharpe_3y": 3.17,
+    "updated": "2026-11-02T23:46:29",
+    "note": "auto-promotion: 4y/3y/2y validation + Sharpe>1.05x bar"
   }
 }
