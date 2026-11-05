@@ -26,5 +26,8 @@
     "sharpe_3y": 3.17,
     "updated": "2026-11-02T23:46:29",
     "note": "auto-promotion: 4y/3y/2y validation + Sharpe>1.05x bar"
-  }
+  },
+  "fw_entry": 377.0679,
+  "fw_sl": 353.86,
+  "fw_tp": 386.44
 }
